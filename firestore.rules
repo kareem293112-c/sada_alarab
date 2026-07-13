@@ -1,0 +1,134 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'karmo2931@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name == 'كريم' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayId == 'صدى العرب'
+        ))
+      );
+    }
+
+    // Catch-all deny (fallback)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // System configuration and counters
+    match /system/{document=**} {
+      allow read, write: if true;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Voice Rooms
+    match /voice_rooms/{roomId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+      
+      // Participants sub-collection
+      match /participants/{userId} {
+        allow read, write: if isSignedIn();
+      }
+      
+      // Mic seats sub-collection
+      match /mic_seats/{seatId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // Clans
+    match /clans/{clanId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Agents Hub
+    match /agents_hub/{agentId} {
+      allow read: if true;
+      allow create, update, write: if isSignedIn();
+    }
+
+    // Agent Transfer Logs
+    match /agent_transfer_logs/{logId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+    }
+
+    // Agent Coin Transfers
+    match /agent_coin_transfers/{transferId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+    }
+
+    // Cashout Requests
+    match /cashout_requests/{requestId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+    }
+
+    // Withdrawal Requests (Host Salaries)
+    match /withdrawal_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource == null || 
+        resource.data.userId == request.auth.uid || 
+        isAdmin()
+      );
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+    }
+
+    // Agencies
+    match /agencies/{agencyId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+    }
+
+    // Agency Invitations
+    match /agency_invitations/{invitationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Gifts & Logs
+    match /gifts/{giftId} {
+      allow read: if true;
+    }
+    match /gift_logs/{logId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+    }
+    
+    // Messages
+    match /messages/{msgId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Support Tickets
+    match /support_tickets/{ticketId} {
+      allow read, write: if isSignedIn();
+      
+      match /messages/{msgId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+  }
+}
