@@ -53,6 +53,11 @@ service cloud.firestore {
       match /mic_seats/{seatId} {
         allow read, write: if isSignedIn();
       }
+
+      // Chat messages sub-collection
+      match /chat_messages/{msgId} {
+        allow read, write: if isSignedIn();
+      }
     }
 
     // Clans

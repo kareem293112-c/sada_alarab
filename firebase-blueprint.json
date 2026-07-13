@@ -106,6 +106,22 @@
         "joinedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Live chat message in a voice room",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string" },
+        "text": { "type": "string" },
+        "color": { "type": "string" },
+        "type": { "type": "string" },
+        "isEncrypted": { "type": "boolean" },
+        "rawCiphertext": { "type": "string" },
+        "iv": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sender", "text", "createdAt"]
     }
   },
   "firestore": {
@@ -124,6 +140,10 @@
     "voice_rooms/{roomId}/participants/{userId}": {
       "schema": { "$ref": "#/entities/Participant" },
       "description": "Participants currently in the room"
+    },
+    "voice_rooms/{roomId}/chat_messages/{msgId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Live chat messages in the room"
     },
     "gifts/{giftId}": {
       "schema": { "$ref": "#/entities/Gift" },

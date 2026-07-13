@@ -583,6 +583,49 @@ export default function App() {
     return () => unsubscribe();
   }, [activeRoom?.id]);
 
+  // Real-time synchronization of room messages for the active room
+  useEffect(() => {
+    if (!activeRoom?.id) {
+      // Reset room messages to welcome messages when leaving room
+      setRoomMessages([
+        { sender: 'نظام المجلس', text: 'مرحباً بكم في صدى العرب! يرجى الالتزام بالاحترام المتبادل داخل مجالسنا الموقرة.', color: 'text-purple-400 font-bold', type: 'system' },
+        { sender: 'خالد الحربي', text: 'السلام عليكم ورحمة الله، حياكم الله جميعاً بالمجلس الدافئ.', color: 'text-amber-400', type: 'chat' },
+      ]);
+      return;
+    }
+
+    console.log("[SYNC] Starting room messages listener for room:", activeRoom.id);
+    const messagesRef = collection(db, "voice_rooms", activeRoom.id, "chat_messages");
+    const q = query(messagesRef, orderBy("createdAt", "asc"), limit(70));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          sender: data.sender || 'مستخدم',
+          text: data.text || '',
+          color: data.color || 'text-purple-300 font-medium',
+          type: data.type || 'chat',
+          isEncrypted: data.isEncrypted || false,
+          rawCiphertext: data.rawCiphertext || '',
+          iv: data.iv || '',
+          createdAt: data.createdAt
+        };
+      });
+
+      const initialSystemMsg = { sender: 'نظام المجلس', text: 'مرحباً بكم في صدى العرب! يرجى الالتزام بالاحترام المتبادل داخل مجالسنا الموقرة.', color: 'text-purple-400 font-bold', type: 'system' };
+      setRoomMessages([
+        initialSystemMsg,
+        ...msgs
+      ]);
+    }, (error) => {
+      console.error("Error syncing room messages:", error);
+    });
+
+    return () => unsubscribe();
+  }, [activeRoom?.id]);
+
   useEffect(() => {
     if (activeRoom && rooms.length > 0) {
       const updated = rooms.find(r => r.id === activeRoom.id);
@@ -1588,18 +1631,32 @@ export default function App() {
   };
 
   // Trigger VIP Entrance banner
-  const triggerVipEntrance = (userName: string, level: number) => {
+  const triggerVipEntrance = (userName: string, level: number, roomId?: string) => {
     setVipEntrance({ active: true, userName, level });
-    // Append VIP Entrance announcement to live chat
-    setRoomMessages((prev) => [
-      ...prev,
-      {
+    
+    const targetRoomId = roomId || activeRoom?.id;
+    if (targetRoomId) {
+      const messagesRef = collection(db, "voice_rooms", targetRoomId, "chat_messages");
+      addDoc(messagesRef, {
         sender: 'دخول VIP',
         text: `👑 دخل الـ VIP ${userName} (مستوى ${level}) إلى المجلس! حيو الفخم!`,
         color: 'text-amber-300 font-extrabold animate-pulse',
         type: 'vip',
-      },
-    ]);
+        createdAt: new Date().toISOString()
+      }).catch(err => console.error("Error writing VIP entrance to Firestore:", err));
+    } else {
+      // Append VIP Entrance announcement to live chat locally if roomId is not available
+      setRoomMessages((prev) => [
+        ...prev,
+        {
+          sender: 'دخول VIP',
+          text: `👑 دخل الـ VIP ${userName} (مستوى ${level}) إلى المجلس! حيو الفخم!`,
+          color: 'text-amber-300 font-extrabold animate-pulse',
+          type: 'vip',
+        },
+      ]);
+    }
+
     setTimeout(() => {
       setVipEntrance(null);
     }, 4500);
@@ -1692,7 +1749,7 @@ export default function App() {
 
     // Trigger entrance animation for high-level user
     if (currentUser && currentUser.level >= 10) {
-      triggerVipEntrance(currentUser.name, currentUser.level);
+      triggerVipEntrance(currentUser.name, currentUser.level, room.id);
     }
   };
 
@@ -1961,15 +2018,30 @@ export default function App() {
       ? `أرسل هدية فاخرة: [ ${gift.arabicName} ${gift.icon} ] إلى [ ${recName} ]! 🌟`
       : `أرسل هدية فاخرة: [ ${gift.arabicName} ${gift.icon} ] للمجلس! 🌟`;
 
-    setRoomMessages(prev => [
-      ...prev,
-      {
-        sender: currentUser.name,
-        text: messageText,
-        color: 'text-amber-400 font-extrabold animate-pulse',
-        type: 'chat'
+    if (activeRoom?.id) {
+      try {
+        const messagesRef = collection(db, "voice_rooms", activeRoom.id, "chat_messages");
+        addDoc(messagesRef, {
+          sender: currentUser.name,
+          text: messageText,
+          color: 'text-amber-400 font-extrabold animate-pulse',
+          type: 'chat',
+          createdAt: new Date().toISOString()
+        }).catch(err => console.error("Error logging gift message to room chat:", err));
+      } catch (err) {
+        console.error("Error sending gift message to Firestore:", err);
       }
-    ]);
+    } else {
+      setRoomMessages(prev => [
+        ...prev,
+        {
+          sender: currentUser.name,
+          text: messageText,
+          color: 'text-amber-400 font-extrabold animate-pulse',
+          type: 'chat'
+        }
+      ]);
+    }
   };
 
   const handleSendChatMessage = async () => {
@@ -2005,17 +2077,34 @@ export default function App() {
       }
     }
     
-    // Send message via Firestore (TODO: implement message persistence)
-    setRoomMessages(prev => [
-      ...prev,
-      {
-        sender: currentUser?.name || 'مستخدم',
-        text: textToSend,
-        color: 'text-purple-300 font-medium',
-        type: 'chat',
-        ...extraProps
+    // Send message via Firestore
+    if (activeRoom?.id) {
+      try {
+        const messagesRef = collection(db, "voice_rooms", activeRoom.id, "chat_messages");
+        await addDoc(messagesRef, {
+          sender: currentUser?.name || 'مستخدم',
+          text: textToSend,
+          color: 'text-purple-300 font-medium',
+          type: 'chat',
+          createdAt: new Date().toISOString(),
+          ...extraProps
+        });
+      } catch (err) {
+        console.error("Error sending room message to Firestore:", err);
       }
-    ]);
+    } else {
+      // Fallback local append if not inside an active room
+      setRoomMessages(prev => [
+        ...prev,
+        {
+          sender: currentUser?.name || 'مستخدم',
+          text: textToSend,
+          color: 'text-purple-300 font-medium',
+          type: 'chat',
+          ...extraProps
+        }
+      ]);
+    }
     setChatInputValue('');
   };
 
