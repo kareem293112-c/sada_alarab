@@ -523,7 +523,7 @@ export default function App() {
 
   // Real-time synchronization of rooms using Firestore
   useEffect(() => {
-    const q = query(collection(db, "voice_rooms"));
+    const q = query(collection(db, "voice_rooms"), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const roomsData = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -641,7 +641,7 @@ export default function App() {
 
   // Real-time synchronization of users using Firestore
   useEffect(() => {
-    const q = query(collection(db, "users"));
+    const q = query(collection(db, "users"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usersData = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -667,13 +667,17 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  const revertingUserIdsRef = useRef<Set<string>>(new Set());
+
   // Check for expired custom display IDs
   useEffect(() => {
     if (users.length === 0) return;
     const now = new Date();
     
     const expiredUsers = users.filter(u => {
+      if (u.id !== currentUser?.id) return false; // Only revert self to prevent infinite loops and concurrent write storms
       if (!u.displayIdExpiredAt) return false;
+      if (revertingUserIdsRef.current.has(u.id)) return false; // Already in-progress or attempted
       try {
         const expiryDate = new Date(u.displayIdExpiredAt);
         return now > expiryDate;
@@ -684,6 +688,7 @@ export default function App() {
 
     if (expiredUsers.length > 0) {
       expiredUsers.forEach(async (u) => {
+        revertingUserIdsRef.current.add(u.id); // Mark as attempted
         try {
           console.log(`[ID EXPIRY] Reverting expired display ID for user ${u.name} (ID: ${u.displayId})`);
           let targetId = u.originalDisplayId;
@@ -700,7 +705,7 @@ export default function App() {
         }
       });
     }
-  }, [users]);
+  }, [users, currentUser?.id]);
 
   useEffect(() => {
     // ---------------- Support Tickets Listener ----------------
@@ -1227,16 +1232,15 @@ export default function App() {
 
   // States relocated to the top of the App component to prevent block-scoped reference errors.
 
-  useEffect(() => {
-    // Check if current user is unmuted on a seat
-    if (!activeRoom || !currentUser || currentScreen !== 'room') {
-      setRealUserMicSpeaking(false);
-      setRealUserMicVolume(0);
-      return;
-    }
-    const userSeat = activeRoom.seats.find(s => s.userId === currentUser.id);
-    const isUnmutedOnSeat = userSeat && !userSeat.isMuted;
+  const isUnmutedOnSeat = !!(
+    activeRoom &&
+    currentUser &&
+    currentScreen === 'room' &&
+    myCurrentSeatIndex !== null &&
+    !myCurrentSeatMuted
+  );
 
+  useEffect(() => {
     if (!isUnmutedOnSeat) {
       setRealUserMicSpeaking(false);
       setRealUserMicVolume(0);
@@ -1317,7 +1321,7 @@ export default function App() {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [activeRoom, currentUser, currentScreen]);
+  }, [isUnmutedOnSeat]);
 
   // Fluctuates speaking volume to simulate dynamic vocal pitch/volume changes
   useEffect(() => {
@@ -3064,7 +3068,7 @@ export default function App() {
                                 </div>
 
                                 {/* Podium No.1 */}
-                                <div className="flex flex-col items-center w-22">
+                                <div className="flex flex-col items-center w-[88px]">
                                   <div className="relative -top-3 scale-110">
                                     <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-xl animate-bounce">👑</span>
                                     <div className="w-11 h-11 rounded-full border-2 border-[#FFAE42] p-0.5 bg-amber-50">
@@ -3074,7 +3078,7 @@ export default function App() {
                                       />
                                     </div>
                                   </div>
-                                  <span className="text-[9px] font-black text-amber-600 mt-1 truncate w-18">أحمد العتيبي</span>
+                                  <span className="text-[9px] font-black text-amber-600 mt-1 truncate w-[72px]">أحمد العتيبي</span>
                                   <span className="text-[8px] text-amber-500 font-extrabold leading-none mt-0.5">125K كوينز</span>
                                   <div className="w-full bg-[#FFAE42] h-14 rounded-t-lg mt-2 flex items-center justify-center font-black text-white text-sm shadow">
                                     1
@@ -6406,6 +6410,9 @@ export default function App() {
                                   try {
                                     await toggleUserAgentStatus(userItem.id, !userItem.isAgent);
                                     setUsers(prev => prev.map(u => u.id === userItem.id ? { ...u, isAgent: !userItem.isAgent } : u));
+                                    if (currentUser && userItem.id === currentUser.id) {
+                                      setCurrentUser(prev => prev ? { ...prev, isAgent: !userItem.isAgent } : null);
+                                    }
                                     alert(`تم ${!userItem.isAgent ? 'منح' : 'سحب'} صلاحية الوكيل بنجاح للمستخدم: ${userItem.name}`);
                                   } catch (e) {
                                     console.error("Error updating agent status", e);

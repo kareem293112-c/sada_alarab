@@ -31,6 +31,12 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Global settings and custom badges
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // User profiles
     match /users/{userId} {
       allow read: if true;

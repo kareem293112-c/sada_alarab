@@ -10,6 +10,13 @@ export default function SettingsView({ onBack, currentUser }: any) {
     window.location.reload();
   };
 
+  const handleClearCache = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    alert('تم مسح جميع الكاش المؤقت والذاكرة المحلية بنجاح!');
+    window.location.reload();
+  };
+
   return (
     <div className="flex-grow flex flex-col bg-slate-50" dir="rtl">
       <div className="bg-white p-4 flex items-center justify-between shadow-sm relative z-10">
@@ -28,7 +35,14 @@ export default function SettingsView({ onBack, currentUser }: any) {
           ))}
         </div>
         
-        <div className="p-4 mt-8">
+        <div className="p-4 mt-8 space-y-3">
+          <button 
+            onClick={handleClearCache}
+            className="w-full py-3.5 bg-amber-50 text-amber-700 rounded-full font-bold text-sm hover:bg-amber-100 transition border border-amber-200"
+          >
+            مسح الكاش المؤقت والذاكرة
+          </button>
+
           <button 
             onClick={handleLogout}
             className="w-full py-3.5 bg-red-50 text-red-500 rounded-full font-bold text-sm hover:bg-red-100 transition"

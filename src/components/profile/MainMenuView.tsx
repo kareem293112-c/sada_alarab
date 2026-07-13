@@ -185,7 +185,7 @@ export default function MainMenuView({
           
           {/* Circular Avatar with Thick Golden Ring */}
           <div className="relative">
-            <div className="w-18 h-18 rounded-full p-[2.5px] bg-gradient-to-tr from-yellow-300 via-amber-400 to-orange-400 shadow-[0_0_12px_rgba(253,224,71,0.4)]">
+            <div className="w-[72px] h-[72px] rounded-full p-[2.5px] bg-gradient-to-tr from-yellow-300 via-amber-400 to-orange-400 shadow-[0_0_12px_rgba(253,224,71,0.4)]">
               <img 
                 src={currentUser?.avatar || "https://api.dicebear.com/7.x/adventurer/svg"} 
                 className="w-full h-full rounded-full object-cover bg-slate-900 border-2 border-white/10" 
