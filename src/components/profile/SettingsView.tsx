@@ -5,13 +5,11 @@ import { signOut } from 'firebase/auth';
 
 export default function SettingsView({ onBack, currentUser }: any) {
   const handleLogout = () => {
-    localStorage.removeItem('sadaa_manual_user_id');
     signOut(auth);
     window.location.reload();
   };
 
   const handleClearCache = () => {
-    localStorage.clear();
     sessionStorage.clear();
     alert('تم مسح جميع الكاش المؤقت والذاكرة المحلية بنجاح!');
     window.location.reload();

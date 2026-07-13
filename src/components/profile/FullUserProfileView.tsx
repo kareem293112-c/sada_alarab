@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowRight, Edit3, Award, Calendar, Globe, User, Shield, 
   Sparkles, Coins, HelpCircle, Heart, Flame, Compass, ChevronLeft,
   Share2, Trophy, Crown, Gift, Music, Image, Send, Copy, Check, Users, Trash2
 } from 'lucide-react';
 import { AppUser } from '../../types';
+import { db } from '../../lib/firebase';
+import { collection, doc, query, onSnapshot, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 
 interface Props {
   onBack: () => void;
@@ -42,26 +44,37 @@ export default function FullUserProfileView({ onBack, currentUser, users, onNavi
   });
 
   // Moments interactive simulation
-  const [moments, setMoments] = useState<Moment[]>(() => {
-    const saved = localStorage.getItem(`moments_${currentUser?.id}`);
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: '1',
-        text: 'مرحباً بكم في ملفي الشخصي الجديد على تطبيق صدى العرب! 🎙️✨ يسعدني انضمامكم لمجالسي الصوتية ومشاركتكم أسعد اللحظات.',
-        timestamp: 'منذ ساعتين',
-        likes: 12,
-        commentsCount: 3
-      },
-      {
-        id: '2',
-        text: 'جلسة طرب الليلة في غرفتي الخاصة "أوتار الشرق" 🎵 لا تفوتوا الحضور الساعة 9 مساءً بتوقيت مكة المكرمة 🇸🇦👑',
-        timestamp: 'أمس',
-        likes: 24,
-        commentsCount: 8
+  const [moments, setMoments] = useState<Moment[]>([]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const q = query(collection(db, `users/${currentUser.id}/moments`));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dbMoments = snapshot.docs.map(doc => doc.data() as Moment);
+      if (dbMoments.length === 0) {
+        setMoments([
+          {
+            id: '1',
+            text: 'مرحباً بكم في ملفي الشخصي الجديد على تطبيق صدى العرب! 🎙️✨ يسعدني انضمامكم لمجالسي الصوتية ومشاركتكم أسعد اللحظات.',
+            timestamp: 'منذ ساعتين',
+            likes: 12,
+            commentsCount: 3
+          },
+          {
+            id: '2',
+            text: 'جلسة طرب الليلة في غرفتي الخاصة "أوتار الشرق" 🎵 لا تفوتوا الحضور الساعة 9 مساءً بتوقيت مكة المكرمة 🇸🇦👑',
+            timestamp: 'أمس',
+            likes: 24,
+            commentsCount: 8
+          }
+        ]);
+      } else {
+        // Sort by timestamp if possible, otherwise rely on insertion order or basic sort
+        setMoments(dbMoments.sort((a, b) => b.id.localeCompare(a.id)));
       }
-    ];
-  });
+    });
+    return () => unsubscribe();
+  }, [currentUser?.id]);
   const [newMomentText, setNewMomentText] = useState('');
 
   if (!currentUser) return null;
@@ -117,16 +130,16 @@ export default function FullUserProfileView({ onBack, currentUser, users, onNavi
       commentsCount: 0
     };
 
-    const updated = [newMoment, ...moments];
-    setMoments(updated);
-    localStorage.setItem(`moments_${currentUser.id}`, JSON.stringify(updated));
+    if (currentUser?.id) {
+      setDoc(doc(db, `users/${currentUser.id}/moments`, newMoment.id), newMoment).catch(console.error);
+    }
     setNewMomentText('');
   };
 
   const handleDeleteMoment = (id: string) => {
-    const updated = moments.filter(m => m.id !== id);
-    setMoments(updated);
-    localStorage.setItem(`moments_${currentUser.id}`, JSON.stringify(updated));
+    if (currentUser?.id) {
+      deleteDoc(doc(db, `users/${currentUser.id}/moments`, id)).catch(console.error);
+    }
   };
 
   const getCountryFlag = (countryName?: string) => {
@@ -621,9 +634,14 @@ export default function FullUserProfileView({ onBack, currentUser, users, onNavi
                     <button 
                       onClick={() => {
                         // Toggle like simulation
-                        const updated = moments.map(m => m.id === moment.id ? { ...m, likes: m.likes + 1 } : m);
-                        setMoments(updated);
-                        localStorage.setItem(`moments_${currentUser.id}`, JSON.stringify(updated));
+                        if (currentUser?.id) {
+                          const momentRef = doc(db, `users/${currentUser.id}/moments`, moment.id);
+                          updateDoc(momentRef, { likes: moment.likes + 1 }).catch(console.error);
+                        } else {
+                          // local fallback for UI test
+                          const updated = moments.map(m => m.id === moment.id ? { ...m, likes: m.likes + 1 } : m);
+                          setMoments(updated);
+                        }
                       }}
                       className="flex items-center gap-1 hover:text-red-500 transition cursor-pointer"
                     >

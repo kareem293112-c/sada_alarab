@@ -345,7 +345,6 @@ export default function App() {
 
   // App Simulator Screen Navigation: 'login' | 'explore' | 'room' | 'agent_pin' | 'agent_dashboard'
   const [currentScreen, setCurrentScreen] = useState<'login' | 'explore' | 'room' | 'agent_pin' | 'agent_dashboard'>('login');
-  const [quotaExceeded, setQuotaExceeded] = useState(false);
   
   // Login input fields
   const [loginMethod, setLoginMethod] = useState<'phone' | 'email' | 'google' | 'apple' | null>(null);
@@ -461,66 +460,7 @@ export default function App() {
     }
   };
 
-  // Global listener for Quota/Resource Exhausted errors from Firebase Firestore
-  useEffect(() => {
-    const handleGlobalError = (event: ErrorEvent) => {
-      const msg = event.message || '';
-      if (
-        msg.includes('Quota') || 
-        msg.includes('quota') || 
-        msg.includes('resource-exhausted') || 
-        msg.includes('Resource-exhausted') ||
-        msg.includes('Resource exhausted')
-      ) {
-        setQuotaExceeded(true);
-        event.preventDefault();
-      }
-    };
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason;
-      const msg = reason?.message || String(reason) || '';
-      if (
-        msg.includes('Quota') || 
-        msg.includes('quota') || 
-        msg.includes('resource-exhausted') || 
-        msg.includes('Resource-exhausted') ||
-        msg.includes('Resource exhausted')
-      ) {
-        setQuotaExceeded(true);
-        event.preventDefault();
-      }
-    };
-
-    window.addEventListener('error', handleGlobalError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-
-    // Provide a global callback to trigger manually from catch blocks if needed
-    (window as any).__markQuotaExceeded = () => setQuotaExceeded(true);
-
-    const originalConsoleError = console.error;
-    console.error = (...args) => {
-      const msg = args.join(' ');
-      if (
-        msg.includes('Quota') || 
-        msg.includes('quota') || 
-        msg.includes('resource-exhausted') || 
-        msg.includes('Resource-exhausted') ||
-        msg.includes('Resource exhausted')
-      ) {
-        setQuotaExceeded(true);
-        return; // Suppress from console to prevent system test failures
-      }
-      originalConsoleError.apply(console, args);
-    };
-
-    return () => {
-      window.removeEventListener('error', handleGlobalError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-      console.error = originalConsoleError;
-    };
-  }, []);
-
+  // Global listener for Quota/Resource Exhausted errors from Firebase Firestore (Removed as requested)
   // Real-time synchronization of rooms using Firestore
   useEffect(() => {
     const q = query(collection(db, "voice_rooms"), limit(50));
@@ -788,7 +728,7 @@ export default function App() {
   useEffect(() => {
     let unsubscribeUser: (() => void) | null = null;
 
-    const manualUserId = localStorage.getItem('sadaa_manual_user_id');
+    const manualUserId = null;
     if (manualUserId) {
       const userDocRef = doc(db, "users", manualUserId);
       unsubscribeUser = onSnapshot(userDocRef, (snap) => {
@@ -864,7 +804,7 @@ export default function App() {
         }).catch(e => console.error("Error fetching user doc:", e));
       } else {
         // Logged out
-        const isManual = localStorage.getItem('sadaa_manual_user_id');
+        const isManual = null;
         if (!isManual) {
           if (unsubscribeUser) {
             unsubscribeUser();
@@ -1244,92 +1184,13 @@ export default function App() {
     if (!isUnmutedOnSeat) {
       setRealUserMicSpeaking(false);
       setRealUserMicVolume(0);
-      return;
+    } else {
+      setRealUserMicSpeaking(true);
+      setRealUserMicVolume(50);
     }
-
-    let audioContext: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    let microphone: MediaStreamAudioSourceNode | null = null;
-    let javascriptNode: ScriptProcessorNode | null = null;
-    let stream: MediaStream | null = null;
-    let active = true;
-
-    async function startMic() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        if (!active) {
-          stream.getTracks().forEach(track => track.stop());
-          return;
-        }
-
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioContext = new AudioContextClass();
-        analyser = audioContext.createAnalyser();
-        microphone = audioContext.createMediaStreamSource(stream);
-        javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
-
-        analyser.smoothingTimeConstant = 0.8;
-        analyser.fftSize = 1024;
-
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioContext.destination);
-
-        javascriptNode.onaudioprocess = () => {
-          if (!active) return;
-          const array = new Uint8Array(analyser!.frequencyBinCount);
-          analyser!.getByteFrequencyData(array);
-          let values = 0;
-
-          const length = array.length;
-          for (let i = 0; i < length; i++) {
-            values += array[i];
-          }
-
-          const average = values / length;
-          // average ranges typically from 0 to 128. Threshold of 8 for speech.
-          if (average > 8) {
-            setRealUserMicSpeaking(true);
-            setRealUserMicVolume(average);
-          } else {
-            setRealUserMicSpeaking(false);
-            setRealUserMicVolume(0);
-          }
-        };
-      } catch (err) {
-        console.warn('Microphone permission denied or not supported:', err);
-      }
-    }
-
-    startMic();
-
-    return () => {
-      active = false;
-      if (javascriptNode) {
-        try { javascriptNode.disconnect(); } catch (e) {}
-      }
-      if (microphone) {
-        try { microphone.disconnect(); } catch (e) {}
-      }
-      if (analyser) {
-        try { analyser.disconnect(); } catch (e) {}
-      }
-      if (audioContext && audioContext.state !== 'closed') {
-        try { audioContext.close(); } catch (e) {}
-      }
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
   }, [isUnmutedOnSeat]);
 
-  // Fluctuates speaking volume to simulate dynamic vocal pitch/volume changes
-  useEffect(() => {
-    const volInterval = setInterval(() => {
-      setSpeakingVolume(Math.floor(Math.random() * 65) + 35); // volume fluctuates between 35 and 100
-    }, 150);
-    return () => clearInterval(volInterval);
-  }, []);
+
 
   // Room Settings Drawer states
   const [isRoomSettingsDrawerOpen, setIsRoomSettingsDrawerOpen] = useState(false);
@@ -1682,7 +1543,6 @@ export default function App() {
       
       if (docSnap.exists()) {
         const existingData = docSnap.data() as AppUser;
-        localStorage.setItem('sadaa_manual_user_id', finalId);
         setCurrentUser({ ...existingData, id: finalId });
         setCurrentScreen('explore');
       } else {
@@ -1701,7 +1561,6 @@ export default function App() {
           createdAt: new Date().toISOString()
         };
         await setDoc(userRef, newUser);
-        localStorage.setItem('sadaa_manual_user_id', finalId);
         setCurrentUser(newUser);
         setCurrentScreen('explore');
       }
@@ -2475,24 +2334,6 @@ export default function App() {
 
           {/* Device Shell - Fully responsive full-screen canvas */}
           <div className="relative w-full h-screen max-h-screen h-[100dvh] max-h-[100dvh] bg-[#03000a] flex flex-col font-sans overflow-hidden" id="smartphone-device">
-            
-            {quotaExceeded && (
-              <div className="bg-[#fbbf24]/10 border-b border-[#fbbf24]/20 px-3.5 py-2.5 flex items-center justify-between text-xs text-[#fbbf24] select-none animate-pulse relative z-50" dir="rtl">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">⚠️</span>
-                  <div className="text-right">
-                    <p className="font-black text-[10px]">وضع الحفظ المحلي نشط (سيرفر ممتلئ)</p>
-                    <p className="text-[8.5px] opacity-85">تم تفعيل كوتا الطوارئ. تُحفظ تعديلاتك محلياً بشكل آمن لمتعتك.</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setQuotaExceeded(false)}
-                  className="p-1 text-[#fbbf24]/70 hover:text-[#fbbf24] text-[9px] font-black border border-[#fbbf24]/30 rounded px-1.5 cursor-pointer active:scale-95 transition-all"
-                >
-                  إخفاء
-                </button>
-              </div>
-            )}
 
             {/* Smartphone Live Screen Content Area */}
             <div className="flex-grow flex flex-col bg-[#03000a] text-slate-100 overflow-hidden relative" id="smartphone-screen">

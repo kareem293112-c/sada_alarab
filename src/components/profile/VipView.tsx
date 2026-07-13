@@ -597,48 +597,9 @@ export default function VipView({ onBack, currentUser }: Props) {
             4: cleanData[4] || '',
             5: cleanData[5] || '',
           });
-        } else {
-          const localBadges = localStorage.getItem("custom_vip_badges");
-          if (localBadges) {
-            const data = JSON.parse(localBadges) as Record<string | number, string>;
-            const cleanData: Record<number, string> = {};
-            [1, 2, 3, 4, 5].forEach(lvl => {
-              const val = data[lvl] || data[String(lvl)];
-              if (val) {
-                cleanData[lvl] = val;
-              }
-            });
-            setCustomBadges(cleanData);
-            setBadgeInputs({
-              1: cleanData[1] || '',
-              2: cleanData[2] || '',
-              3: cleanData[3] || '',
-              4: cleanData[4] || '',
-              5: cleanData[5] || '',
-            });
-          }
         }
       } catch (err) {
         console.error("Error fetching custom VIP badges:", err);
-        const localBadges = localStorage.getItem("custom_vip_badges");
-        if (localBadges) {
-          const data = JSON.parse(localBadges) as Record<string | number, string>;
-          const cleanData: Record<number, string> = {};
-          [1, 2, 3, 4, 5].forEach(lvl => {
-            const val = data[lvl] || data[String(lvl)];
-            if (val) {
-              cleanData[lvl] = val;
-            }
-          });
-          setCustomBadges(cleanData);
-          setBadgeInputs({
-            1: cleanData[1] || '',
-            2: cleanData[2] || '',
-            3: cleanData[3] || '',
-            4: cleanData[4] || '',
-            5: cleanData[5] || '',
-          });
-        }
       }
     };
     fetchCustomBadges();
@@ -1377,7 +1338,6 @@ export default function VipView({ onBack, currentUser }: Props) {
                     
                     setCustomBadges(cleanedBadges);
                     setBadgeInputs(cleanedBadges);
-                    localStorage.setItem("custom_vip_badges", JSON.stringify(cleanedBadges));
                     
                     const docRef = doc(db, "settings", "vip_badges");
                     try {
