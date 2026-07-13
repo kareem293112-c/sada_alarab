@@ -309,6 +309,9 @@ export default function App() {
 
   // Profile, Direct Messaging & Follower States
   const [selectedProfileUser, setSelectedProfileUser] = useState<AppUser | null>(null);
+  const activeProfileUser = selectedProfileUser 
+    ? (users.find(u => u.id === selectedProfileUser.id) || selectedProfileUser) 
+    : null;
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPrivateInboxOpen, setIsPrivateInboxOpen] = useState(false);
   const [activePrivateChatUser, setActivePrivateChatUser] = useState<AppUser | null>(null);
@@ -2763,7 +2766,7 @@ export default function App() {
                   
                                     {/* Dashboard General Top Header Removed */}
                   {/* SUB-VIEW RENDERING AREA */}
-                  <div className={`flex-grow overflow-y-auto pb-20 ${dashboardTab === 'profile' ? 'p-0' : 'p-4 space-y-4'}`} id="dashboard-tab-content" style={{ backgroundColor: dashboardTab === 'profile' ? '#f8fafc' : undefined }}>
+                  <div className={`flex-grow overflow-y-auto pb-6 ${dashboardTab === 'profile' ? 'p-0' : 'p-4 space-y-4'}`} id="dashboard-tab-content" style={{ backgroundColor: dashboardTab === 'profile' ? '#f8fafc' : undefined }}>
 
                     {/* ==================== 1. PARTY TAB (المجالس الصوتية) ==================== */}
                     {dashboardTab === 'party' && (
@@ -3485,6 +3488,7 @@ export default function App() {
                         <ProfileIndex setCurrentScreen={setCurrentScreen} 
                           currentUser={currentUser}
                           users={users}
+                          onToggleFollow={handleToggleFollow}
                           supportTickets={supportTickets}
                           setIsSupportAdminModalOpen={setIsSupportAdminModalOpen}
                           setIsAdminManageModalOpen={setIsAdminManageModalOpen}
@@ -3510,7 +3514,13 @@ export default function App() {
                     )}
                   </div>
                   {/* NATIVE PREMIUM BOTTOM NAVIGATION BAR */}
-                  <div className="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-[#E8DCC4]/60 flex justify-around items-center px-2 shadow-[0_-2px_10px_rgba(0,0,0,0.03)] z-40 select-none">
+                  <div 
+                    className="w-full flex-shrink-0 bg-white border-t border-[#E8DCC4]/60 flex justify-around items-center px-2 shadow-[0_-2px_10px_rgba(0,0,0,0.03)] z-40 select-none"
+                    style={{
+                      height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+                      paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+                    }}
+                  >
                     
                     {/* Tab 1: Party */}
                     <button
@@ -5606,9 +5616,11 @@ export default function App() {
               )}
 
               {/* 👤 PREMIUM USER PROFILE MODAL & BIO DRAWER */}
-              {isProfileModalOpen && selectedProfileUser && (
-                <div className="absolute inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-end justify-center animate-fade-in text-right">
-                  <div className="bg-[#0c081d] border-t border-purple-500/30 p-5 rounded-t-[32px] w-full max-h-[85%] overflow-y-auto space-y-5 shadow-2xl relative font-sans">
+              {isProfileModalOpen && activeProfileUser && (() => {
+                const selectedProfileUser = activeProfileUser;
+                return (
+                  <div className="absolute inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-end justify-center animate-fade-in text-right">
+                    <div className="bg-[#0c081d] border-t border-purple-500/30 p-5 rounded-t-[32px] w-full max-h-[85%] overflow-y-auto space-y-5 shadow-2xl relative font-sans">
                     
                     {/* Decorative golden dome accent */}
                     <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-purple-500 to-amber-500" />
@@ -5688,8 +5700,10 @@ export default function App() {
                         <span className="text-[9px] text-slate-400">المتابعون</span>
                       </div>
                       <div>
-                        <strong className="text-xs text-white block font-mono">3.4K</strong>
-                        <span className="text-[9px] text-slate-400">الزوار</span>
+                        <strong className="text-xs text-white block font-mono">
+                          {users.filter(u => selectedProfileUser.following?.includes(u.id) && selectedProfileUser.followers?.includes(u.id)).length}
+                        </strong>
+                        <span className="text-[9px] text-slate-400">الأصدقاء</span>
                       </div>
                     </div>
 
@@ -5812,9 +5826,10 @@ export default function App() {
                       );
                     })()}
 
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* 💬 PREMIUM PRIVATE MESSAGING CHAT DRAWER */}
               {isPrivateInboxOpen && activePrivateChatUser && currentUser && (

@@ -11,11 +11,14 @@ import AccountLinkView from './AccountLinkView';
 import VipView from './VipView';
 import CoinAgentPortalView from './CoinAgentPortalView';
 import AgencyPortalView from './AgencyPortalView';
+import SocialListView from './SocialListView';
+import FullUserProfileView from './FullUserProfileView';
 
 interface Props {
   setCurrentScreen: (val: string) => void;
   currentUser: AppUser | null;
   users: AppUser[];
+  onToggleFollow: (targetUser: AppUser) => Promise<void>;
   supportTickets: any[];
   setIsSupportAdminModalOpen: (val: boolean) => void;
   setIsAdminManageModalOpen: (val: boolean) => void;
@@ -30,6 +33,7 @@ interface Props {
 export default function ProfileIndex(props: Props) {
   const [activeView, setActiveView] = useState<string>('main');
   const [initialLevelTab, setInitialLevelTab] = useState<'wealth' | 'popular'>('wealth');
+  const [initialSocialTab, setInitialSocialTab] = useState<'friends' | 'followers' | 'following'>('friends');
 
   const handleNavigate = (view: string) => {
     if (view === 'my_room') {
@@ -40,6 +44,15 @@ export default function ProfileIndex(props: Props) {
     } else if (view === 'level_popular') {
       setInitialLevelTab('popular');
       setActiveView('level');
+    } else if (view === 'social_friends') {
+      setInitialSocialTab('friends');
+      setActiveView('social_lists');
+    } else if (view === 'social_followers') {
+      setInitialSocialTab('followers');
+      setActiveView('social_lists');
+    } else if (view === 'social_following') {
+      setInitialSocialTab('following');
+      setActiveView('social_lists');
     } else {
       setActiveView(view);
     }
@@ -69,6 +82,26 @@ export default function ProfileIndex(props: Props) {
         return <CoinAgentPortalView onBack={() => setActiveView('main')} currentUser={props.currentUser} users={props.users} />;
       case 'agency_portal':
         return <AgencyPortalView onBack={() => setActiveView('main')} currentUser={props.currentUser} users={props.users} />;
+      case 'social_lists':
+        return (
+          <SocialListView 
+            onBack={() => setActiveView('main')} 
+            currentUser={props.currentUser} 
+            users={props.users} 
+            onToggleFollow={props.onToggleFollow}
+            setIsProfileModalOpen={props.setIsProfileModalOpen}
+            setSelectedProfileUser={props.setSelectedProfileUser}
+          />
+        );
+      case 'full_profile':
+        return (
+          <FullUserProfileView 
+            onBack={() => setActiveView('main')} 
+            currentUser={props.currentUser} 
+            users={props.users} 
+            onNavigate={handleNavigate}
+          />
+        );
       default:
         // Handle unimplemented routes by returning to main
         return (

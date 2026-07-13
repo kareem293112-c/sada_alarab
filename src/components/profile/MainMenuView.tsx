@@ -10,12 +10,25 @@ interface Props {
   setCurrentScreen: (val: string) => void;
   onNavigate: (view: string) => void;
   currentUser: AppUser | null;
+  users: AppUser[];
   supportTickets: any[];
   setIsSupportAdminModalOpen: (val: boolean) => void;
   setIsAdminManageModalOpen: (val: boolean) => void;
+  setIsProfileModalOpen: (val: boolean) => void;
+  setSelectedProfileUser: (val: AppUser | null) => void;
 }
 
-export default function MainMenuView({ onNavigate, currentUser, supportTickets, setIsSupportAdminModalOpen, setIsAdminManageModalOpen, setCurrentScreen }: Props) {
+export default function MainMenuView({ 
+  onNavigate, 
+  currentUser, 
+  users, 
+  supportTickets, 
+  setIsSupportAdminModalOpen, 
+  setIsAdminManageModalOpen, 
+  setCurrentScreen,
+  setIsProfileModalOpen,
+  setSelectedProfileUser
+}: Props) {
   const senderXp = currentUser?.senderXp || 0;
   const charmXp = currentUser?.charmXp || 0;
   const wealthLevel = getLevelFromXp(senderXp);
@@ -165,7 +178,10 @@ export default function MainMenuView({ onNavigate, currentUser, supportTickets, 
       <div className="bg-gradient-to-l from-[#d91b5c] via-[#ec2d70] to-[#f39c12] pt-8 pb-6 px-4 text-white relative shadow-md">
         
         {/* Profile Card row */}
-        <div className="flex items-center gap-4 text-right">
+        <div 
+          onClick={() => onNavigate('full_profile')}
+          className="flex items-center gap-4 text-right cursor-pointer hover:opacity-95 active:scale-[0.99] transition-all duration-200"
+        >
           
           {/* Circular Avatar with Thick Golden Ring */}
           <div className="relative">
@@ -223,20 +239,35 @@ export default function MainMenuView({ onNavigate, currentUser, supportTickets, 
 
         {/* Dynamic Stats Row */}
         <div className="grid grid-cols-3 mt-6 pt-4 border-t border-white/15 text-center">
-          <div className="space-y-0.5">
-            <strong className="text-base font-black tracking-wide block">{currentUser?.followers?.length || 58}</strong>
+          <button 
+            onClick={() => onNavigate('social_followers')}
+            className="space-y-0.5 focus:outline-none hover:opacity-80 active:scale-95 transition-all cursor-pointer text-center"
+          >
+            <strong className="text-base font-black tracking-wide block text-white font-mono">
+              {currentUser ? (users.filter(u => currentUser.followers?.includes(u.id)).length) : 0}
+            </strong>
             <span className="text-[10px] text-white/70 font-bold block">المتابعين</span>
-          </div>
-          <div className="space-y-0.5 border-x border-white/10">
-            <strong className="text-base font-black tracking-wide block">{currentUser?.following?.length || 26}</strong>
+          </button>
+          
+          <button 
+            onClick={() => onNavigate('social_following')}
+            className="space-y-0.5 border-x border-white/10 focus:outline-none hover:opacity-80 active:scale-95 transition-all cursor-pointer text-center"
+          >
+            <strong className="text-base font-black tracking-wide block text-white font-mono">
+              {currentUser ? (users.filter(u => currentUser.following?.includes(u.id)).length) : 0}
+            </strong>
             <span className="text-[10px] text-white/70 font-bold block">يتابع</span>
-          </div>
-          <div className="space-y-0.5">
-            <strong className="text-base font-black tracking-wide block">
-              {Math.floor((currentUser?.followers?.length || 58) * 0.3) || 11}
+          </button>
+          
+          <button 
+            onClick={() => onNavigate('social_friends')}
+            className="space-y-0.5 focus:outline-none hover:opacity-80 active:scale-95 transition-all cursor-pointer text-center"
+          >
+            <strong className="text-base font-black tracking-wide block text-white font-mono">
+              {currentUser ? (users.filter(u => currentUser.following?.includes(u.id) && currentUser.followers?.includes(u.id)).length) : 0}
             </strong>
             <span className="text-[10px] text-white/70 font-bold block">الأصدقاء</span>
-          </div>
+          </button>
         </div>
 
       </div>
