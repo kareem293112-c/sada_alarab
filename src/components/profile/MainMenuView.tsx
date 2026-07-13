@@ -380,7 +380,7 @@ export default function MainMenuView({
         )}
 
         {/* Authorized Coin Agent Portal Row (Conditional) */}
-        {(currentUser?.role === 'authorized_coin_agent') && (
+        {currentUser?.isAgent === true && (
           <div className="bg-white rounded-2xl shadow-sm border-b-2 border-emerald-500 overflow-hidden mb-3">
             <button 
               onClick={() => onNavigate('coin_agent_portal')}

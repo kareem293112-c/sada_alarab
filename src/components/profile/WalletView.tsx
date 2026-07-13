@@ -38,7 +38,7 @@ export default function WalletView({ onBack, currentUser, users = [] }: WalletVi
   }, [currentUser]);
 
   // Extract agents
-  const agents = users.filter(user => user.isAgent === true);
+  const agents = users.filter(user => user.isAgent === true || user.role === 'authorized_coin_agent' || user.role === 'agent');
 
   const filteredAgents = agents.filter(agent => 
     agent.name.toLowerCase().includes(searchQuery.toLowerCase()) || 

@@ -7,6 +7,7 @@ export const updateAuthorizedCoinAgent = async (
 ): Promise<void> => {
   await updateDoc(doc(db, "users", userId), {
     role: 'authorized_coin_agent',
+    isAgent: true,
     agent_coin_inventory: newInventory
   });
 };

@@ -5338,7 +5338,7 @@ export default function App() {
                       </div>
 
                       {/* Display direct enter for agent itself */}
-                      {(currentUser?.role === 'agent' || currentUser?.role === 'admin' || currentUser?.isAgent) && (
+                      {currentUser?.isAgent === true && (
                         <div className="bg-gradient-to-r from-amber-600/20 to-purple-600/20 border border-amber-500/30 p-3 rounded-xl mb-4 flex justify-between items-center">
                           <button
                             onClick={() => {
@@ -6327,7 +6327,7 @@ export default function App() {
                                 const newInventory = (targetUser.agent_coin_inventory || 0) + amount;
                                 await updateAuthorizedCoinAgent(targetUser.id, newInventory);
                                 
-                                setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: 'authorized_coin_agent', agent_coin_inventory: newInventory } : u));
+                                setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: 'authorized_coin_agent', isAgent: true, agent_coin_inventory: newInventory } : u));
                                 
                                 setAdminCoinAgentSuccessData({
                                   name: adminCoinAgentName,
