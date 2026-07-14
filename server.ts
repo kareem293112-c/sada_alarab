@@ -239,7 +239,6 @@ function getGameStatePayload() {
     // Identifiers
     id: gameRound.id,
     roundId: gameRound.id,
-    round: gameRound.id,
     gameId: gameRound.id,
 
     // Phase and timing
@@ -302,6 +301,17 @@ function getGameStatePayload() {
 
   return {
     ...basePayload,
+    gameState: { ...basePayload },
+    gameRound: { ...basePayload },
+    game: { ...basePayload },
+    state: { ...basePayload },
+    currentRound: { ...basePayload },
+    round: gameRound.id, // Avoid React Error 31 (rendering object as child)
+    room: 'global', // Avoid React Error 31 (rendering object as child)
+    roomState: { ...basePayload },
+    payload: { ...basePayload },
+    event: { ...basePayload },
+    data: { ...basePayload }
   };
 }
 
@@ -449,7 +459,6 @@ setInterval(async () => {
       const winningOptObj = multiplierOptions.find(o => o.id === gameRound.winningOption);
       roundHistory.unshift({
         roundId: gameRound.id,
-    round: gameRound.id,
         winningOption: gameRound.winningOption || 'pizza',
         multiplier: winningOptObj?.multiplier || 5,
         timestamp: new Date().toISOString(),
@@ -612,6 +621,7 @@ app.get('/api/admin/dashboard', (req, res) => {
     systemPool,
     platformProfit,
     activeUsers: io ? io.engine.clientsCount : (wss ? wss.clients.size : 0),
+    gameState: gameRound,
     history: roundHistory,
     config: multiplierOptions
   });
@@ -702,7 +712,7 @@ async function startServer() {
     });
   }
 
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] Running beautifully on http://0.0.0.0:${PORT}`);
   });
