@@ -239,6 +239,7 @@ function getGameStatePayload() {
     // Identifiers
     id: gameRound.id,
     roundId: gameRound.id,
+    round: gameRound.id,
     gameId: gameRound.id,
 
     // Phase and timing
@@ -251,7 +252,6 @@ function getGameStatePayload() {
 
     // Winner fields
     winningOption: gameRound.winningOption,
-    winningFood: gameRound.winningOption,
     winningSlot: gameRound.winningOption,
     winner: gameRound.winningOption,
     winnerSlot: gameRound.winningOption,
@@ -302,7 +302,6 @@ function getGameStatePayload() {
 
   return {
     ...basePayload,
-    round: gameRound.id,
   };
 }
 
@@ -450,6 +449,7 @@ setInterval(async () => {
       const winningOptObj = multiplierOptions.find(o => o.id === gameRound.winningOption);
       roundHistory.unshift({
         roundId: gameRound.id,
+    round: gameRound.id,
         winningOption: gameRound.winningOption || 'pizza',
         multiplier: winningOptObj?.multiplier || 5,
         timestamp: new Date().toISOString(),
@@ -612,7 +612,6 @@ app.get('/api/admin/dashboard', (req, res) => {
     systemPool,
     platformProfit,
     activeUsers: io ? io.engine.clientsCount : (wss ? wss.clients.size : 0),
-    gameState: gameRound,
     history: roundHistory,
     config: multiplierOptions
   });
