@@ -2,23 +2,37 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-import admin from 'firebase-admin';
+import fs from 'fs';
+import { initializeApp, cert, getApps, App } from 'firebase-admin/app';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { createServer as createHttpServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createHttpServer(app);
 
-// Configure robust CORS
+// 1. Configure robust CORS to prevent any blocking issues
+const allowedOrigins = [
+  'https://wif.onrender.com',
+  'https://sada-alarab.onrender.com',
+  'https://onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://ais-dev-qts7zckbddelnrwnra7g7o-150385904306.europe-west2.run.app',
+  'https://ais-pre-qts7zckbddelnrwnra7g7o-150385904306.europe-west2.run.app'
+];
+
 app.use(cors({
-  origin: [
-    'https://wif.onrender.com',
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'https://ais-dev-qts7zckbddelnrwnra7g7o-150385904306.europe-west2.run.app',
-    'https://ais-pre-qts7zckbddelnrwnra7g7o-150385904306.europe-west2.run.app'
-  ],
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.onrender.com')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Fallback to allow during preview/testing
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-userid'],
   credentials: true
@@ -26,59 +40,112 @@ app.use(cors({
 
 app.use(express.json());
 
-// Lazy Firebase Database Getter to prevent crashes on startup/boot validation
-let dbInstance: admin.firestore.Firestore | null = null;
+// 2. Lazy Firebase Database Initialization
+let dbInstance: Firestore | null = null;
 
-function getDb(): admin.firestore.Firestore {
+function getDb(): Firestore | null {
   if (dbInstance) return dbInstance;
 
-  const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
   const projectId = "gen-lang-client-0348881645";
   const databaseId = "ai-studio-sadaalarabvoiceb-5f452604-580f-4265-ab18-da9c404b3698";
 
+  // Check secret file path first (standard on Render)
+  const keyPath = '/etc/secrets/firebase-key.json';
+  if (fs.existsSync(keyPath)) {
+    try {
+      const keyContent = fs.readFileSync(keyPath, 'utf8');
+      if (keyContent && keyContent.trim()) {
+        const serviceAccount = JSON.parse(keyContent.trim());
+        const apps = getApps();
+        let app: App;
+        if (apps.length === 0) {
+          app = initializeApp({
+            credential: cert(serviceAccount),
+            projectId: serviceAccount.project_id || projectId
+          });
+        } else {
+          app = apps[0];
+        }
+        const firestoreInstance = getFirestore(app);
+        firestoreInstance.settings({ databaseId });
+        dbInstance = firestoreInstance;
+        console.log("🔥 [FIREBASE] Initialized with Service Account File");
+        return dbInstance;
+      }
+    } catch (err: any) {
+      console.error("❌ [FIREBASE ERROR] Failed to initialize via file:", err.message);
+    }
+  }
+
+  // Fallback to environment variable
+  const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (serviceAccountVar && serviceAccountVar.trim()) {
     try {
       const serviceAccount = JSON.parse(serviceAccountVar.trim());
-      if (admin.apps.length === 0) {
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
+      const apps = getApps();
+      let app: App;
+      if (apps.length === 0) {
+        app = initializeApp({
+          credential: cert(serviceAccount),
           projectId: serviceAccount.project_id || projectId
         });
+      } else {
+        app = apps[0];
       }
-      const firestoreInstance = admin.firestore();
+      const firestoreInstance = getFirestore(app);
       firestoreInstance.settings({ databaseId });
       dbInstance = firestoreInstance;
-      console.log("[FIREBASE] Admin initialized with Service Account and Custom Database ID");
+      console.log("🔥 [FIREBASE] Initialized via Environment Variable");
       return dbInstance;
     } catch (err: any) {
-      console.error("[FIREBASE ERROR] Failed to initialize with FIREBASE_SERVICE_ACCOUNT:", err.message);
+      console.error("❌ [FIREBASE ERROR] Failed to initialize via env variable:", err.message);
     }
   }
 
-  // Fallback / Development mode when service account is not yet provided or parsed
+  // Local/Dev Fallback
   try {
-    if (admin.apps.length === 0) {
-      admin.initializeApp({
+    const apps = getApps();
+    let app: App;
+    if (apps.length === 0) {
+      app = initializeApp({
         projectId: projectId
       });
+    } else {
+      app = apps[0];
     }
-    const firestoreInstance = admin.firestore();
+    const firestoreInstance = getFirestore(app);
     firestoreInstance.settings({ databaseId });
     dbInstance = firestoreInstance;
-    console.log("[FIREBASE] Admin initialized with fallback config and Custom Database ID");
+    console.log("⚠️ [FIREBASE] Initialized with fallback configuration (No service account)");
     return dbInstance;
   } catch (err: any) {
-    console.error("[FIREBASE ERROR] Gracefully caught initialization error to prevent startup crash:", err.message);
-    throw new Error("Database not configured. Please supply a valid FIREBASE_SERVICE_ACCOUNT environment variable.");
+    console.error("❌ [FIREBASE ERROR] Fallback initialization failed:", err.message);
+    return null;
   }
 }
 
+// Ensure database loads once on startup gracefully
+try {
+  getDb();
+} catch (e) {}
+
 // Health Check API
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Define types for game state
+// 3. Game State Variables & Options
+let systemPool = 500000;
+let platformProfit = 0;
+interface GamePlayer {
+  id: string;
+  name: string;
+  avatar: string;
+  balance: number;
+  isBot: boolean;
+}
+const activeRoomPlayers: Record<string, GamePlayer> = {};
+
 interface Bet {
   userId: string;
   optionId: string;
@@ -92,86 +159,221 @@ interface RoundHistory {
   timestamp: string;
 }
 
-// Global Game State
 let gameRound = {
   id: Date.now().toString(),
   phase: 'betting' as 'betting' | 'spinning' | 'result',
-  countdown: 20, // 20 seconds betting phase
+  countdown: 30, // 30 seconds betting phase
   winningOption: null as string | null,
   activeBets: [] as Bet[],
 };
 
 let roundHistory: RoundHistory[] = [];
-let multiplierOptions = [
-  { id: 'pizza', name: '🍕 بيتزا', multiplier: 2, weight: 60 },
-  { id: 'burger', name: '🍔 برجر', multiplier: 3, weight: 30 },
-  { id: 'sushi', name: '🍣 سوشي', multiplier: 5, weight: 8 },
-  { id: 'cupcake', name: '🧁 كاب كيك', multiplier: 10, weight: 2 },
+
+// The 8 food slots matching the frontend wheel exactly
+const multiplierOptions = [
+  { id: 'chicken', name: '🍗 فرخ', multiplier: 45, weight: 2 },
+  { id: 'pizza', name: '🍕 بيتزا', multiplier: 15, weight: 6 },
+  { id: 'sushi', name: '🍣 سوشي', multiplier: 25, weight: 4 },
+  { id: 'cake', name: '🍰 كيك', multiplier: 5, weight: 20 },
+  { id: 'watermelon', name: '🍉 بطيخ', multiplier: 5, weight: 20 },
+  { id: 'meat', name: '🥩 ستيك', multiplier: 5, weight: 20 },
+  { id: 'burger', name: '🍔 برجر', multiplier: 10, weight: 10 },
+  { id: 'salad', name: '🥗 سلطة', multiplier: 5, weight: 20 },
 ];
 
-// Broadcast structures
+const multipliers: { [key: string]: number } = {
+  chicken: 45, pizza: 15, sushi: 25, cake: 5, watermelon: 5, meat: 5, burger: 10, salad: 5
+};
+
+// 4. Broadcasting Mechanisms (SSE, WebSockets, Socket.io)
 const sseClients = new Set<any>();
 let wss: WebSocketServer | null = null;
+let io: SocketIOServer | null = null;
 
 function getGameStatePayload() {
-  return {
+  const currentTotalBets = gameRound.activeBets.reduce((sum, b) => sum + b.amount, 0);
+  const activeBetsMapped = gameRound.activeBets.map(b => ({
+    userId: b.userId,
+    user: b.userId,
+    player: b.userId,
+    optionId: b.optionId,
+    option: b.optionId,
+    choice: b.optionId,
+    slot: b.optionId,
+    key: b.optionId,
+    amount: b.amount,
+    bet: b.amount
+  }));
+
+  const optionColors: Record<string, string> = {
+    pizza: '#ef4444',     // Red
+    burger: '#f97316',    // Orange
+    shawarma: '#f59e0b',  // Amber
+    sushi: '#10b981',     // Emerald
+    kabab: '#3b82f6',     // Blue
+    crepe: '#8b5cf6',     // Violet
+    waffle: '#ec4899',    // Pink
+    lobster: '#f43f5e',   // Rose
+  };
+
+  const mappedOptions = multiplierOptions.map(o => ({
+    id: o.id,
+    slot: o.id,
+    key: o.id,
+    value: o.id,
+    option: o.id,
+    choice: o.id,
+    name: o.name,
+    label: o.name,
+    text: o.name,
+    title: o.name,
+    multiplier: o.multiplier,
+    weight: o.weight,
+    chance: o.weight,
+    color: optionColors[o.id] || '#3b82f6',
+    bgColor: optionColors[o.id] || '#3b82f6',
+    bg: optionColors[o.id] || '#3b82f6'
+  }));
+
+  const basePayload = {
+    // Identifiers
+    id: gameRound.id,
     roundId: gameRound.id,
+    gameId: gameRound.id,
+
+    // Phase and timing
     phase: gameRound.phase,
+    state: gameRound.phase,
+    status: gameRound.phase,
     countdown: gameRound.countdown,
+    timer: gameRound.countdown,
+    timeRemaining: gameRound.countdown,
+
+    // Winner fields
     winningOption: gameRound.winningOption,
-    history: roundHistory,
-    totalBets: gameRound.activeBets.reduce((sum, b) => sum + b.amount, 0),
-    options: multiplierOptions.map(o => ({ id: o.id, name: o.name, multiplier: o.multiplier }))
+    winningFood: gameRound.winningOption,
+    winningSlot: gameRound.winningOption,
+    winner: gameRound.winningOption,
+    winnerSlot: gameRound.winningOption,
+    winningKey: gameRound.winningOption,
+
+    // History and results
+    history: roundHistory || [],
+    roundHistory: roundHistory || [],
+    results: roundHistory || [],
+    logs: roundHistory || [],
+    pastRounds: roundHistory || [],
+    recentSpins: roundHistory || [],
+
+    // Stats and finances
+    totalBets: currentTotalBets,
+    systemPool,
+    platformProfit,
+    pool: systemPool,
+    balance: systemPool,
+
+    // Options mapping (the wheel slots)
+    options: mappedOptions,
+    choices: mappedOptions,
+    items: mappedOptions,
+    slotsData: mappedOptions,
+    foodSlots: mappedOptions.map(o => o.id),
+    slots: mappedOptions.map(o => o.id),
+
+    // Bets list
+    activeBets: activeBetsMapped,
+    bets: activeBetsMapped,
+    placedBets: activeBetsMapped,
+    userBets: activeBetsMapped,
+    betsList: activeBetsMapped,
+
+    // Collections fallbacks to prevent undefined .find or .map errors
+    users: [],
+    players: [],
+    roomPlayers: Object.values(activeRoomPlayers),
+    winners: [],
+    messages: [],
+    participants: [],
+    spectators: [],
+    chat: [],
+    onlineUsers: [],
+    onlinePlayers: []
+  };
+
+  return {
+    ...basePayload,
+    round: gameRound.id,
   };
 }
 
 function broadcastGameState() {
-  const data = JSON.stringify({
+  const statePayload = getGameStatePayload();
+  
+  // Create a dual payload to handle both flat state parsing and wrapped parsing on client
+  const ssePayload = JSON.stringify({
+    ...statePayload,
     type: 'game_state',
-    data: getGameStatePayload()
+    data: statePayload
   });
 
-  // 1. Broadcast to SSE Clients
+  // 1. SSE Broadcast
   for (const res of sseClients) {
     try {
-      res.write(`data: ${data}\n\n`);
+      res.write(`data: ${ssePayload}\n\n`);
     } catch (err) {
       sseClients.delete(res);
     }
   }
 
-  // 2. Broadcast to WebSockets
+  // 2. Native WebSockets Broadcast
   if (wss) {
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         try {
-          client.send(data);
+          client.send(ssePayload);
         } catch (err) {
-          console.error("Error sending message to WebSocket client:", err);
+          console.error("WS Broadcast error:", err);
         }
       }
     });
   }
+
+  // 3. Socket.io Broadcast
+  if (io) {
+    io.emit('game_state', statePayload);
+    
+    // Support specific custom socket events
+    if (gameRound.phase === 'betting') {
+      io.emit('timer_update', { countdown: gameRound.countdown });
+    } else if (gameRound.phase === 'spinning') {
+      io.emit('wheel_spin', { winningSlot: gameRound.winningOption });
+    }
+  }
 }
 
-// Secure Firestore Transactions for payouts
+// 5. Safe Firestore Transactions for payouts
 async function processPayouts() {
   const winningOption = gameRound.winningOption;
   if (!winningOption) return;
 
   const currentOpt = multiplierOptions.find(o => o.id === winningOption);
-  const multiplier = currentOpt?.multiplier || 1;
+  const multiplier = currentOpt?.multiplier || multipliers[winningOption] || 1;
 
   const winners = gameRound.activeBets.filter(b => b.optionId === winningOption);
-  console.log(`[GAME] Round completed: ${gameRound.id}. Winning item: ${winningOption}. Winners Count: ${winners.length}`);
+  console.log(`🎰 [WINNING SLOT] Chosen: ${winningOption}. Winners Count: ${winners.length}`);
+
+  const db = getDb();
+  if (!db) {
+    console.error("⚠️ [PAYOUTS] Database is not available. Skipping payout transactions.");
+    return;
+  }
 
   for (const bet of winners) {
     try {
-      const firestoreDb = getDb();
-      const userRef = firestoreDb.collection('users').doc(bet.userId);
+      const userRef = db.collection('users').doc(bet.userId);
       const reward = bet.amount * multiplier;
 
-      await firestoreDb.runTransaction(async (transaction) => {
+      await db.runTransaction(async (transaction) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists) {
           console.error(`User ${bet.userId} not found during payout.`);
@@ -181,7 +383,6 @@ async function processPayouts() {
         const currentCoins = userDoc.data()?.coins || 0;
         const newCoins = currentCoins + reward;
 
-        // Atomically update user's coins and award dynamic XP (10% of reward amount)
         const currentXp = userDoc.data()?.xp || 0;
         const newXp = currentXp + Math.floor(reward * 0.1);
 
@@ -190,24 +391,29 @@ async function processPayouts() {
           xp: newXp
         });
 
-        console.log(`[PAYOUT] Successfully credited user ${bet.userId} with ${reward} coins. New Balance: ${newCoins}`);
+        console.log(`[PAYOUT] User ${bet.userId} received ${reward} coins. New Balance: ${newCoins}`);
       });
-    } catch (err) {
-      console.error(`[PAYOUT ERROR] Transaction failed for user ${bet.userId}:`, err);
+    } catch (err: any) {
+      console.error(`[PAYOUT ERROR] Transaction failed for user ${bet.userId}:`, err.message);
     }
   }
 }
 
-// Background Game Loop Interval
+// 6. Main Game Loop State Machine
 setInterval(async () => {
   if (gameRound.phase === 'betting') {
     gameRound.countdown--;
+    
+    if (gameRound.countdown === 1 && io) {
+      io.emit('betting_closed');
+    }
+
     if (gameRound.countdown <= 0) {
       // Transition to spinning phase
       gameRound.phase = 'spinning';
       gameRound.countdown = 5; // 5 seconds spin animation
 
-      // Determine the winner based on weighted random selection
+      // Determine winner using weighted random selection
       const totalWeight = multiplierOptions.reduce((sum, opt) => sum + opt.weight, 0);
       let randomValue = Math.random() * totalWeight;
       let selectedOption = multiplierOptions[0];
@@ -221,7 +427,11 @@ setInterval(async () => {
       }
 
       gameRound.winningOption = selectedOption.id;
-      console.log(`[GAME LOOP] Wheel spinning... Chosen Winner: ${selectedOption.id}`);
+      console.log(`🎰 [SPIN] Wheel is spinning! Selected option: ${selectedOption.id}`);
+      
+      if (io) {
+        io.emit('wheel_spin', { winningSlot: selectedOption.id });
+      }
       broadcastGameState();
     } else {
       broadcastGameState();
@@ -229,19 +439,19 @@ setInterval(async () => {
   } else if (gameRound.phase === 'spinning') {
     gameRound.countdown--;
     if (gameRound.countdown <= 0) {
-      // Transition to result showing and process transactions
+      // Transition to result showing
       gameRound.phase = 'result';
-      gameRound.countdown = 5; // 5 seconds display phase
+      gameRound.countdown = 5; // 5 seconds display results
 
-      // Run transactional payouts safely
+      // Safely run Firestore transactions for winners
       await processPayouts();
 
-      // Log to history list
+      // Log to history
       const winningOptObj = multiplierOptions.find(o => o.id === gameRound.winningOption);
       roundHistory.unshift({
         roundId: gameRound.id,
         winningOption: gameRound.winningOption || 'pizza',
-        multiplier: winningOptObj?.multiplier || 2,
+        multiplier: winningOptObj?.multiplier || 5,
         timestamp: new Date().toISOString(),
       });
 
@@ -256,15 +466,18 @@ setInterval(async () => {
   } else if (gameRound.phase === 'result') {
     gameRound.countdown--;
     if (gameRound.countdown <= 0) {
-      // Reset state for new round
+      // Reset for next round
       gameRound = {
         id: Date.now().toString(),
         phase: 'betting',
-        countdown: 20,
+        countdown: 30,
         winningOption: null,
         activeBets: [],
       };
-      console.log(`[GAME LOOP] New Round started: ${gameRound.id}`);
+      console.log(`🔄 [ROUND] Starting a new round: ${gameRound.id}`);
+      if (io) {
+        io.emit('round_start', { countdown: 30, systemPool });
+      }
       broadcastGameState();
     } else {
       broadcastGameState();
@@ -272,77 +485,83 @@ setInterval(async () => {
   }
 }, 1000);
 
-// API Endpoint to Place a Bet (Secure Firestore Transaction)
+// 7. Betting Endpoint (Handles both `slot` and `optionId` to be robust with client)
 const placeBetHandler = async (req: express.Request, res: express.Response) => {
   try {
-    const { userId, optionId, amount } = req.body;
+    const { userId, slot, optionId, amount } = req.body;
+    const targetOption = slot || optionId;
 
-    if (!userId || !optionId || typeof amount !== 'number' || amount <= 0) {
-      res.status(400).json({ error: "Invalid parameters. Require: userId, optionId, amount" });
+    if (!userId || !targetOption || typeof amount !== 'number' || amount <= 0) {
+      res.status(400).json({ error: "بيانات الرهان غير صالحة" });
       return;
     }
 
     if (gameRound.phase !== 'betting') {
-      res.status(400).json({ error: "Betting is closed for the current round!" });
+      res.status(400).json({ error: "المراهنة مغلقة حالياً للجولة الحالية!" });
       return;
     }
 
-    const validOption = multiplierOptions.find(o => o.id === optionId);
+    const validOption = multiplierOptions.find(o => o.id === targetOption);
     if (!validOption) {
-      res.status(400).json({ error: "Invalid betting option selected" });
+      res.status(400).json({ error: "الخيار المختار غير صالح" });
       return;
     }
 
-    const firestoreDb = getDb();
-    const userRef = firestoreDb.collection('users').doc(userId);
+    const db = getDb();
+    if (!db) {
+      res.status(500).json({ error: "قاعدة بيانات الفايربيز غير متصلة بالسيرفر حالياً" });
+      return;
+    }
+
+    const userRef = db.collection('users').doc(userId);
     let finalCoins = 0;
 
-    // Use transaction to verify balance and deduct bet amount atomically
-    await firestoreDb.runTransaction(async (transaction) => {
+    await db.runTransaction(async (transaction) => {
       const userDoc = await transaction.get(userRef);
       if (!userDoc.exists) {
-        throw new Error("User does not exist in our system");
+        throw new Error("المستخدم غير موجود في قاعدة البيانات");
       }
 
       const currentCoins = userDoc.data()?.coins || 0;
       if (currentCoins < amount) {
-        throw new Error("Insufficient coin balance!");
+        throw new Error("رصيدك الحالي غير كافٍ للمراهنة");
       }
 
       finalCoins = currentCoins - amount;
       transaction.update(userRef, { coins: finalCoins });
+
+      // Financial cuts
+      const profitCut = Math.floor(amount * 0.10);
+      const poolAddition = amount - profitCut;
+
+      platformProfit += profitCut;
+      systemPool += poolAddition;
     });
 
-    // Record bet in game memory
-    gameRound.activeBets.push({ userId, optionId, amount });
-    console.log(`[BET REGISTERED] User ${userId} bet ${amount} on ${optionId}. Remaining: ${finalCoins}`);
+    // Record bet in memory
+    gameRound.activeBets.push({ userId, optionId: targetOption, amount });
+    console.log(`💸 [BET ACCEPTED] User ${userId} placed ${amount} on ${targetOption}`);
 
-    // Broadcast update immediately to show live bets updates
     broadcastGameState();
 
     res.json({
       success: true,
-      message: "Bet placed successfully",
+      message: "تم قبول الرهان وخصمه بنجاح",
       newBalance: finalCoins,
       roundId: gameRound.id
     });
   } catch (err: any) {
-    console.error("[BET ERROR] Bet processing failed:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ [BET ERROR]", err.message);
+    res.status(400).json({ error: err.message });
   }
 };
 
-// Map both /api/placeBet and /api/game/bet to handle requests seamlessly
+// Map all potential endpoints so both old and new frontends never fail!
 app.post('/api/placeBet', placeBetHandler);
 app.post('/api/game/bet', placeBetHandler);
 
-// API Endpoint: Get Current Real-time Game State
-app.get('/api/game/state', (req, res) => {
-  res.json(getGameStatePayload());
-});
-
-// SSE Stream Endpoint for Game Countdown Updates
-app.get('/api/game/stream', (req, res) => {
+// 8. Stream Endpoints for SSE (Server-Sent Events)
+const sseHandler = (req: express.Request, res: express.Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -350,30 +569,66 @@ app.get('/api/game/stream', (req, res) => {
 
   sseClients.add(res);
 
-  // Send initial game state immediately
-  const initialPayload = JSON.stringify({
+  const userId = req.query.userId as string;
+  if (userId) {
+    activeRoomPlayers[userId] = {
+      id: userId,
+      name: (req.query.name as string) || 'Guest',
+      avatar: (req.query.avatarUrl as string) || '',
+      balance: parseInt((req.query.balance as string) || '0', 10),
+      isBot: false
+    };
+    req.on('close', () => {
+      delete activeRoomPlayers[userId];
+    });
+  }
+
+  // Send initial payload immediately
+  const statePayload = getGameStatePayload();
+  const ssePayload = JSON.stringify({
+    ...statePayload,
     type: 'game_state',
-    data: getGameStatePayload()
+    data: statePayload
   });
-  res.write(`data: ${initialPayload}\n\n`);
+  res.write(`data: ${ssePayload}\n\n`);
 
   req.on('close', () => {
     sseClients.delete(res);
   });
+};
+
+// Map both paths to support both old and new client routing
+app.get('/api/stream', sseHandler);
+app.get('/api/game/stream', sseHandler);
+
+// API Endpoint for single state fetch
+app.get('/api/game/state', (req, res) => {
+  res.json(getGameStatePayload());
 });
 
-// Admin Dashboard: Get detailed game stats
-app.get('/api/admin/game-status', (req, res) => {
+// 9. Admin Dashboard API
+app.get('/api/admin/dashboard', (req, res) => {
   res.json({
+    systemPool,
+    platformProfit,
+    activeUsers: io ? io.engine.clientsCount : (wss ? wss.clients.size : 0),
     gameState: gameRound,
     history: roundHistory,
-    totalRegisteredSSE: sseClients.size,
-    totalWebSockets: wss ? wss.clients.size : 0,
     config: multiplierOptions
   });
 });
 
-// Admin: Force immediate spin result to a specific chosen option
+app.post('/api/admin/inject', (req, res) => {
+  const { amount } = req.body;
+  if (amount && amount > 0) {
+    systemPool += amount;
+    broadcastGameState();
+    res.json({ success: true, systemPool });
+  } else {
+    res.status(400).json({ error: "قيمة الشحن غير صحيحة" });
+  }
+});
+
 app.post('/api/admin/force-spin', (req, res) => {
   const { optionId } = req.body;
   if (gameRound.phase !== 'betting') {
@@ -390,54 +645,47 @@ app.post('/api/admin/force-spin', (req, res) => {
   gameRound.phase = 'spinning';
   gameRound.countdown = 5;
   gameRound.winningOption = optionId;
-  console.log(`[ADMIN FORCE] Admin forced winning option to: ${optionId}`);
+  console.log(`[ADMIN FORCE] forced winning option to: ${optionId}`);
   broadcastGameState();
 
   res.json({ success: true, message: `Forced spin result to ${optionId}` });
 });
 
-// Admin: Configure win rate or weight configurations dynamically
-app.post('/api/admin/set-rate', (req, res) => {
-  const { optionId, weight, multiplier } = req.body;
-  const targetOption = multiplierOptions.find(o => o.id === optionId);
-
-  if (!targetOption) {
-    res.status(404).json({ error: "Option not found" });
-    return;
+// Create Socket.io engine
+io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
   }
-
-  if (typeof weight === 'number') targetOption.weight = weight;
-  if (typeof multiplier === 'number') targetOption.multiplier = multiplier;
-
-  console.log(`[ADMIN CONFIG] Custom settings updated for ${optionId}: weight=${targetOption.weight}, mult=${targetOption.multiplier}`);
-  res.json({ success: true, option: targetOption });
 });
 
-// Create base HTTP server to attach WebSockets perfectly
-const httpServer = createHttpServer(app);
+io.on('connection', (socket) => {
+  console.log('[SOCKET.IO] Client connected:', socket.id);
+  socket.emit('game_state', getGameStatePayload());
 
-// Initialize WebSockets server attached to the HTTP server
+  socket.on('disconnect', () => {
+    console.log('[SOCKET.IO] Client disconnected:', socket.id);
+  });
+});
+
+// Keep native WebSockets for redundant compatibility
 wss = new WebSocketServer({ server: httpServer, path: '/ws/game' });
-
 wss.on('connection', (ws) => {
-  console.log('[WEBSOCKET] New client connected');
-
-  // Send current state on connection
-  ws.send(JSON.stringify({
+  console.log('[WS] Client connected');
+  const payload = JSON.stringify({
+    ...getGameStatePayload(),
     type: 'game_state',
     data: getGameStatePayload()
-  }));
-
-  ws.on('error', (err) => {
-    console.error('[WEBSOCKET ERROR]', err);
   });
+  ws.send(payload);
 
   ws.on('close', () => {
-    console.log('[WEBSOCKET] Client disconnected');
+    console.log('[WS] Client disconnected');
   });
 });
 
-// Setup Vite middleware for development & static serving for production
+// Setup Vite development middleware & production static serving
 const isProd = process.env.NODE_ENV === 'production';
 
 async function startServer() {
@@ -449,7 +697,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Serve static frontend files built in dist
     app.use(express.static(path.join(process.cwd(), 'dist')));
     app.get('*', (req, res) => {
       res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
@@ -458,7 +705,7 @@ async function startServer() {
 
   const PORT = process.env.PORT || 3000;
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running beautifully on http://0.0.0.0:${PORT}`);
+    console.log(`🚀 [SERVER] Running beautifully on http://0.0.0.0:${PORT}`);
   });
 }
 

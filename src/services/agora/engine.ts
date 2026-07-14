@@ -111,9 +111,6 @@ export class AgoraEngineManager {
             await client.join(appId, finalRoomID, token, userID);
             this.isJoined = true;
             console.log(`[AGORA] Successfully joined room: ${finalRoomID} with UID: ${userID}`);
-
-            // إنشاء وبث الميكروفون فوراً لضمان سماع الآخرين للصوت
-            await this.startPublishing();
         } catch (err) {
             console.warn("[AGORA] Real Agora connection failed. Activating high-fidelity local room simulation fallback...", err);
             this.isJoined = true;

@@ -32,8 +32,10 @@
     "motion": "^12.23.24",
     "pg": "^8.22.0",
     "pg-connection-string": "^2.14.0",
+    "puppeteer": "^25.3.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "socket.io": "^4.8.3",
     "vite": "^6.2.3",
     "vite-plugin-node-polyfills": "^0.28.0",
     "ws": "^8.21.0"

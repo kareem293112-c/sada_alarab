@@ -4988,12 +4988,12 @@ export default function App() {
                       </div>
 
                       {/* Game WebView Simulator Container */}
-                      <div className="flex-grow w-full bg-slate-950 relative">
+                      <div className="flex-grow w-full bg-transparent relative">
                         <iframe
-                          src={`https://wif.onrender.com/?userId=${currentUser?.id || ""}`}
-                          className="w-full h-full border-0"
+                          src={`/game.html?v=${Date.now()}&userId=${auth.currentUser?.uid || currentUser?.id || ""}&name=${encodeURIComponent(currentUser?.name || "")}&avatarUrl=${encodeURIComponent(currentUser?.avatar || "")}&coins=${currentUser?.coins || 0}&roomId=${activeRoom?.id || ""}`}
+                          className="w-full h-full border-0 bg-transparent"
                           title="Food Fortune Wheel Game"
-                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share; camera; microphone"
                           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                         />
                       </div>

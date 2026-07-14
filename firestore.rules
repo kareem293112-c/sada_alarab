@@ -52,17 +52,20 @@ service cloud.firestore {
       
       // Participants sub-collection
       match /participants/{userId} {
-        allow read, write: if isSignedIn();
+        allow read: if true;
+        allow write: if isSignedIn();
       }
       
       // Mic seats sub-collection
       match /mic_seats/{seatId} {
-        allow read, write: if isSignedIn();
+        allow read: if true;
+        allow write: if isSignedIn();
       }
 
       // Chat messages sub-collection
       match /chat_messages/{msgId} {
-        allow read, write: if isSignedIn();
+        allow read: if true;
+        allow write: if isSignedIn();
       }
     }
 
@@ -99,13 +102,9 @@ service cloud.firestore {
 
     // Withdrawal Requests (Host Salaries)
     match /withdrawal_requests/{requestId} {
-      allow read: if isSignedIn() && (
-        resource == null || 
-        resource.data.userId == request.auth.uid || 
-        isAdmin()
-      );
+      allow read: if true;
       allow create: if isSignedIn();
-      allow update: if isAdmin();
+      allow update: if isSignedIn();
     }
 
     // Agencies
@@ -116,7 +115,8 @@ service cloud.firestore {
 
     // Agency Invitations
     match /agency_invitations/{invitationId} {
-      allow read, write: if isSignedIn();
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Gifts & Logs
@@ -130,15 +130,18 @@ service cloud.firestore {
     
     // Messages
     match /messages/{msgId} {
-      allow read, write: if isSignedIn();
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Support Tickets
     match /support_tickets/{ticketId} {
-      allow read, write: if isSignedIn();
+      allow read: if true;
+      allow write: if isSignedIn();
       
       match /messages/{msgId} {
-        allow read, write: if isSignedIn();
+        allow read: if true;
+        allow write: if isSignedIn();
       }
     }
   }
