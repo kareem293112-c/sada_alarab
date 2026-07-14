@@ -233,9 +233,212 @@ const getNextDisplayId = async (): Promise<string> => {
   }
 };
 
+// Default styling variables for real-time sizing of VIP frames and SVIP badges
+const DEFAULT_VIP_CONFIG = {
+  frames: {
+    1: { width: 44, height: 44, scale: 1.0 },
+    2: { width: 44, height: 44, scale: 1.0 },
+    3: { width: 44, height: 44, scale: 1.0 },
+    4: { width: 44, height: 44, scale: 1.0 },
+    5: { width: 44, height: 44, scale: 1.0 }
+  },
+  badges: {
+    1: { width: 150, height: 150, scale: 1.0 },
+    2: { width: 150, height: 150, scale: 1.0 },
+    3: { width: 150, height: 150, scale: 1.0 },
+    4: { width: 150, height: 150, scale: 1.0 },
+    5: { width: 150, height: 150, scale: 1.0 }
+  }
+};
+
+const VipSizingTool = ({ 
+  vipConfig, 
+  onUpdateConfig 
+}: { 
+  vipConfig: any; 
+  onUpdateConfig: (type: 'frames' | 'badges', level: number, field: 'width' | 'height' | 'scale', value: number) => void;
+}) => {
+  const [selectedType, setSelectedType] = useState<'frames' | 'badges'>('frames');
+  const [selectedLevel, setSelectedLevel] = useState<number>(1);
+
+  const activeItem = vipConfig?.[selectedType]?.[selectedLevel] || { width: 44, height: 44, scale: 1.0 };
+
+  const handleSliderChange = (field: 'width' | 'height' | 'scale', val: number) => {
+    onUpdateConfig(selectedType, selectedLevel, field, val);
+  };
+
+  return (
+    <div className="space-y-4 text-slate-200">
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setSelectedType('frames')}
+          className={`py-2 rounded-xl text-[11px] font-black transition-all ${
+            selectedType === 'frames'
+              ? 'bg-purple-600 text-white shadow-md'
+              : 'bg-white/5 text-slate-400 hover:bg-white/10'
+          }`}
+        >
+          🖼️ إطارات الـ VIP (المقاعد)
+        </button>
+        <button
+          onClick={() => setSelectedType('badges')}
+          className={`py-2 rounded-xl text-[11px] font-black transition-all ${
+            selectedType === 'badges'
+              ? 'bg-purple-600 text-white shadow-md'
+              : 'bg-white/5 text-slate-400 hover:bg-white/10'
+          }`}
+        >
+          🏅 شارات الـ SVIP (الملف)
+        </button>
+      </div>
+
+      <div className="flex justify-between items-center bg-white/5 p-1.5 rounded-2xl border border-white/5" dir="rtl">
+        <span className="text-[10px] font-bold text-slate-400 pr-2">اختر المستوى:</span>
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((lvl) => (
+            <button
+              key={lvl}
+              onClick={() => setSelectedLevel(lvl)}
+              className={`w-7 h-7 rounded-lg text-xs font-black transition-all ${
+                selectedLevel === lvl
+                  ? 'bg-amber-500 text-slate-950 font-black'
+                  : 'bg-white/5 text-slate-300 hover:bg-white/10'
+              }`}
+            >
+              {lvl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-4" dir="rtl">
+        <div className="flex justify-between items-center text-[10px] text-purple-300 font-bold">
+          <span>{selectedType === 'frames' ? `إطار VIP مستوى ${selectedLevel}` : `شارة SVIP مستوى ${selectedLevel}`}</span>
+          <span>تعديل في الوقت الفعلي</span>
+        </div>
+
+        {/* Width Control */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] font-bold">
+            <span className="text-slate-400">العرض (Width)</span>
+            <span className="text-amber-400 font-mono">{activeItem.width}px</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min="20"
+              max="350"
+              value={activeItem.width}
+              onChange={(e) => handleSliderChange('width', parseInt(e.target.value))}
+              className="flex-grow accent-purple-500 bg-slate-950/60 rounded-lg h-1.5 appearance-none cursor-pointer"
+            />
+            <input
+              type="number"
+              min="20"
+              max="350"
+              value={activeItem.width}
+              onChange={(e) => {
+                const val = Math.max(20, Math.min(350, parseInt(e.target.value) || 20));
+                handleSliderChange('width', val);
+              }}
+              className="w-14 bg-slate-950/60 text-slate-200 text-center font-mono text-xs rounded-lg p-1 border border-white/10 focus:outline-none focus:border-purple-500"
+            />
+          </div>
+        </div>
+
+        {/* Height Control */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] font-bold">
+            <span className="text-slate-400">الارتفاع (Height)</span>
+            <span className="text-amber-400 font-mono">{activeItem.height}px</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min="20"
+              max="350"
+              value={activeItem.height}
+              onChange={(e) => handleSliderChange('height', parseInt(e.target.value))}
+              className="flex-grow accent-purple-500 bg-slate-950/60 rounded-lg h-1.5 appearance-none cursor-pointer"
+            />
+            <input
+              type="number"
+              min="20"
+              max="350"
+              value={activeItem.height}
+              onChange={(e) => {
+                const val = Math.max(20, Math.min(350, parseInt(e.target.value) || 20));
+                handleSliderChange('height', val);
+              }}
+              className="w-14 bg-slate-950/60 text-slate-200 text-center font-mono text-xs rounded-lg p-1 border border-white/10 focus:outline-none focus:border-purple-500"
+            />
+          </div>
+        </div>
+
+        {/* Scale Control */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] font-bold">
+            <span className="text-slate-400">مقياس الحجم (Scale)</span>
+            <span className="text-amber-400 font-mono">x{activeItem.scale}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min="0.5"
+              max="2.5"
+              step="0.05"
+              value={activeItem.scale}
+              onChange={(e) => handleSliderChange('scale', parseFloat(e.target.value))}
+              className="flex-grow accent-purple-500 bg-slate-950/60 rounded-lg h-1.5 appearance-none cursor-pointer"
+            />
+            <input
+              type="number"
+              min="0.5"
+              max="2.5"
+              step="0.05"
+              value={activeItem.scale}
+              onChange={(e) => {
+                const val = Math.max(0.5, Math.min(2.5, parseFloat(e.target.value) || 0.5));
+                handleSliderChange('scale', val);
+              }}
+              className="w-14 bg-slate-950/60 text-slate-200 text-center font-mono text-xs rounded-lg p-1 border border-white/10 focus:outline-none focus:border-purple-500"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // Global States representing Database
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [vipConfig, setVipConfig] = useState<any>(DEFAULT_VIP_CONFIG);
+
+  const handleUpdateVipConfig = async (type: 'frames' | 'badges', level: number, field: 'width' | 'height' | 'scale', value: number) => {
+    const updated = {
+      ...vipConfig,
+      [type]: {
+        ...vipConfig[type],
+        [level]: {
+          ...vipConfig[type][level],
+          [field]: value
+        }
+      }
+    };
+    
+    // Update local state instantly for zero-latency slider response
+    setVipConfig(updated);
+    
+    // Save to Firestore so it replicates real-time for all other users
+    try {
+      const docRef = doc(db, "settings", "vip_config");
+      await setDoc(docRef, updated);
+    } catch (err) {
+      console.error("Error updating vip_config in Firestore:", err);
+    }
+  };
+
   const [currentUser, _setCurrentUser] = useState<AppUser | null>(null);
   const setCurrentUser = (user: AppUser | null | ((prev: AppUser | null) => AppUser | null)) => {
     if (typeof user === 'function') {
@@ -427,6 +630,21 @@ export default function App() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
 
+  
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!confirm('هل أنت متأكد من حذف الغرفة؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+    try {
+      await deleteDoc(doc(db, "voice_rooms", roomId));
+      if (activeRoom?.id === roomId) {
+        setCurrentScreen('explore');
+        setActiveRoom(null);
+      }
+    } catch (err) {
+      console.error("Error deleting room", err);
+      alert('حدث خطأ أثناء محاولة حذف الغرفة');
+    }
+  };
+
   const handleCreateRoom = async (name: string) => {
     try {
       await addDoc(collection(db, "voice_rooms"), {
@@ -459,6 +677,35 @@ export default function App() {
       return { success: false, error: 'حدث خطأ في إنشاء الغرفة' };
     }
   };
+
+  // Real-time synchronization of VIP Frame & SVIP Badge design configurations
+  useEffect(() => {
+    const docRef = doc(db, "settings", "vip_config");
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setVipConfig({
+          frames: {
+            1: { ...DEFAULT_VIP_CONFIG.frames[1], ...data.frames?.[1] },
+            2: { ...DEFAULT_VIP_CONFIG.frames[2], ...data.frames?.[2] },
+            3: { ...DEFAULT_VIP_CONFIG.frames[3], ...data.frames?.[3] },
+            4: { ...DEFAULT_VIP_CONFIG.frames[4], ...data.frames?.[4] },
+            5: { ...DEFAULT_VIP_CONFIG.frames[5], ...data.frames?.[5] }
+          },
+          badges: {
+            1: { ...DEFAULT_VIP_CONFIG.badges[1], ...data.badges?.[1] },
+            2: { ...DEFAULT_VIP_CONFIG.badges[2], ...data.badges?.[2] },
+            3: { ...DEFAULT_VIP_CONFIG.badges[3], ...data.badges?.[3] },
+            4: { ...DEFAULT_VIP_CONFIG.badges[4], ...data.badges?.[4] },
+            5: { ...DEFAULT_VIP_CONFIG.badges[5], ...data.badges?.[5] }
+          }
+        });
+      }
+    }, (error) => {
+      console.error("Error syncing vip_config:", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Global listener for Quota/Resource Exhausted errors from Firebase Firestore (Removed as requested)
   // Real-time synchronization of rooms using Firestore
@@ -537,36 +784,55 @@ export default function App() {
       return;
     }
 
+    // Ensure local state is clean and fresh when re-entering a room
+    setRoomMessages([
+      { id: 'sys', sender: 'نظام المجلس', text: 'مرحباً بكم في صدى العرب! يرجى الالتزام بالاحترام المتبادل داخل مجالسنا الموقرة.', color: 'text-purple-400 font-bold', type: 'system' }
+    ]);
     console.log("[SYNC] Starting room messages listener for room:", activeRoom.id);
     const messagesRef = collection(db, "voice_rooms", activeRoom.id, "chat_messages");
-    const q = query(messagesRef, orderBy("createdAt", "asc"), limit(70));
+    // Only listen to messages sent AFTER we join to save read quotas
+    const joinTime = new Date().toISOString();
+    const q = query(messagesRef, where("createdAt", ">=", joinTime), orderBy("createdAt", "asc"));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          sender: data.sender || 'مستخدم',
-          text: data.text || '',
-          color: data.color || 'text-purple-300 font-medium',
-          type: data.type || 'chat',
-          isEncrypted: data.isEncrypted || false,
-          rawCiphertext: data.rawCiphertext || '',
-          iv: data.iv || '',
-          createdAt: data.createdAt
-        };
+    const unsubscribe = onSnapshot(q, {
+      next: (snapshot) => {
+        // If we are getting the snapshot, we only append new messages to the existing state
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const doc = change.doc;
+          const data = doc.data();
+          const msg = {
+            id: doc.id,
+            sender: data.sender || 'مستخدم',
+            text: data.text || '',
+            color: data.color || 'text-purple-300 font-medium',
+            type: data.type || 'chat',
+            isEncrypted: data.isEncrypted || false,
+            rawCiphertext: data.rawCiphertext || '',
+            iv: data.iv || '',
+            createdAt: data.createdAt
+          };
+          setRoomMessages(prev => {
+            // Avoid duplicates
+            if (prev.find(m => m.id === msg.id)) return prev;
+            return [...prev, msg].slice(-100); // Keep max 100 in local state
+          });
+        }
       });
-
-      const initialSystemMsg = { sender: 'نظام المجلس', text: 'مرحباً بكم في صدى العرب! يرجى الالتزام بالاحترام المتبادل داخل مجالسنا الموقرة.', color: 'text-purple-400 font-bold', type: 'system' };
-      setRoomMessages([
-        initialSystemMsg,
-        ...msgs
-      ]);
-    }, (error) => {
-      console.error("Error syncing room messages:", error);
+      // We don't need to map over all docs anymore since we manage state incrementally
+      },
+      error: (error) => {
+        console.error("Error syncing room messages:", error);
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      // Instantly purge local state on unmount / exit to prevent memory leaks and ensure fresh screen on rejoin
+      setRoomMessages([
+        { id: 'sys', sender: 'نظام المجلس', text: 'مرحباً بكم في صدى العرب! يرجى الالتزام بالاحترام المتبادل داخل مجالسنا الموقرة.', color: 'text-purple-400 font-bold', type: 'system' }
+      ]);
+    };
   }, [activeRoom?.id]);
 
   useEffect(() => {
@@ -1250,6 +1516,7 @@ export default function App() {
 
   // Native Mobile UI States (Bottom sheet draw lists)
   const [isGiftDrawerOpen, setIsGiftDrawerOpen] = useState(false);
+  const [isGameSheetOpen, setIsGameSheetOpen] = useState(false);
 
   const [isQueueDrawerOpen, setIsQueueDrawerOpen] = useState(false);
   const [isNoiseCancellation, setIsNoiseCancellation] = useState(true);
@@ -4104,24 +4371,32 @@ export default function App() {
                                 <div className="relative z-10">
                                   {index === 0 ? (
                                     // Mason / Host / Ahmad Al-Otaibi (Luxury animated gold border + Gold Crown)
-                                    <div className={`relative p-0.5 rounded-full select-none vip-golden-shine shadow-lg transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-amber-500/40' : 'shadow-black/40'}`}>
-                                      <div className="relative p-0.5 rounded-full bg-[#1b1202] border border-yellow-500/30">
+                                    <div 
+                                      className={`relative p-0.5 rounded-full select-none vip-golden-shine shadow-lg transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-amber-500/40' : 'shadow-black/40'}`}
+                                    >
+                                      <div className="relative p-0.5 rounded-full bg-[#1b1202] border border-yellow-500/30 w-full h-full">
                                         <div className="absolute -top-4.5 left-1/2 -translate-x-1/2 text-[15px] drop-shadow-md z-30 animate-[bounce_1.8s_infinite] select-none pointer-events-none">👑</div>
                                         {childrenNode}
                                       </div>
                                     </div>
                                   ) : index === 1 ? ( // Sophia (Purple neon glow)
-                                    <div className={`relative p-0.5 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-500 to-pink-500 shadow-sm transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-purple-500/50' : ''}`}>
+                                    <div 
+                                      className={`relative p-0.5 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-500 to-pink-500 shadow-sm transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-purple-500/50' : ''}`}
+                                    >
                                       {childrenNode}
                                     </div>
                                   ) : index === 2 ? ( // Charlotte (Cyan neon ring)
-                                    <div className={`relative p-0.5 rounded-full bg-gradient-to-tr from-cyan-400 via-blue-500 to-indigo-500 shadow-sm transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-cyan-400/50' : ''}`}>
+                                    <div 
+                                      className={`relative p-0.5 rounded-full bg-gradient-to-tr from-cyan-400 via-blue-500 to-indigo-500 shadow-sm transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-cyan-400/50' : ''}`}
+                                    >
                                       {childrenNode}
                                     </div>
                                   ) : index === 3 ? ( // Ava (Glowing Blue Wings Frame)
-                                    <div className={`relative p-0.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-transform duration-150 ${isSpeaking ? 'scale-105' : ''}`}>
-                                      <div className="absolute -left-2.5 top-1.5 text-[10px] pointer-events-none select-none drop-shadow">🪶</div>
-                                      <div className="absolute -right-2.5 top-1.5 text-[10px] pointer-events-none select-none drop-shadow">🪶</div>
+                                    <div 
+                                      className={`relative p-0.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-transform duration-150 ${isSpeaking ? 'scale-105' : ''}`}
+                                    >
+                                      <div className="absolute -left-2.5 top-1.5 text-[10px] pointer-events-none select-none drop-shadow font-sans">🪶</div>
+                                      <div className="absolute -right-2.5 top-1.5 text-[10px] pointer-events-none select-none drop-shadow font-sans">🪶</div>
                                       {childrenNode}
                                     </div>
                                   ) : index === 4 ? ( // Ryan (Silver Ring)
@@ -4129,7 +4404,9 @@ export default function App() {
                                       {childrenNode}
                                     </div>
                                   ) : index === 5 ? ( // Aby (Angel wings frame)
-                                    <div className={`relative p-0.5 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-orange-400 transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-amber-300/30' : ''}`}>
+                                    <div 
+                                      className={`relative p-0.5 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-orange-400 transition-transform duration-150 ${isSpeaking ? 'scale-105 shadow-amber-300/30' : ''}`}
+                                    >
                                       <div className="absolute -left-3 top-0.5 text-xs pointer-events-none select-none drop-shadow">👼</div>
                                       <div className="absolute -right-3 top-0.5 text-xs pointer-events-none select-none drop-shadow">👼</div>
                                       {childrenNode}
@@ -4455,6 +4732,16 @@ export default function App() {
                       >
                         <span className="text-xl drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">🎁</span>
                       </button>
+
+                      {/* Interactive Food Fortune Wheel Game Launcher */}
+                      <button
+                        onClick={() => setIsGameSheetOpen(true)}
+                        className="w-10 h-10 rounded-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-teal-300 via-indigo-600 to-purple-900 text-white cursor-pointer active:scale-95 hover:scale-105 transition-all shadow-[0_0_15px_rgba(99,102,241,0.7)] flex items-center justify-center shrink-0 border-2 border-indigo-200/90"
+                        title="عجلة الحظ للألعاب"
+                        id="game-wheel-trigger"
+                      >
+                        <span className="text-xl drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">🎡</span>
+                      </button>
                     </div>
                   </div>
 
@@ -4674,6 +4961,41 @@ export default function App() {
                         >
                           إرسال الهدية 🚀
                         </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* INTERACTIVE GAME BOTTOM SHEET (FOOD FORTUNE WHEEL WEBVIEW) */}
+                {isGameSheetOpen && (
+                  <>
+                    <div
+                      className="absolute inset-0 bg-black/70 z-40 animate-fade-in cursor-pointer"
+                      onClick={() => setIsGameSheetOpen(false)}
+                    />
+                    <div className="absolute inset-x-0 bottom-0 h-[80%] max-h-[80%] bg-[#0d0722] border-t-2 border-indigo-500/40 rounded-t-[32px] z-50 animate-fade-in shadow-2xl flex flex-col overflow-hidden text-right">
+                      {/* Modern Bottom Sheet Header */}
+                      <div className="flex justify-between items-center bg-[#130d2e]/90 border-b border-purple-950/40 px-4 py-3 shrink-0 font-sans">
+                        <button
+                          onClick={() => setIsGameSheetOpen(false)}
+                          className="text-xs text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 px-3.5 py-1.5 rounded-full border border-slate-700/50 cursor-pointer active:scale-95 transition-all"
+                        >
+                          إغلاق
+                        </button>
+                        <h4 className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-indigo-200 to-amber-300 flex items-center gap-1.5">
+                          🎡 لعبة عجلة الحظ (Food Fortune Wheel)
+                        </h4>
+                      </div>
+
+                      {/* Game WebView Simulator Container */}
+                      <div className="flex-grow w-full bg-slate-950 relative">
+                        <iframe
+                          src={`https://wif.onrender.com/?userId=${currentUser?.id || ""}`}
+                          className="w-full h-full border-0"
+                          title="Food Fortune Wheel Game"
+                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                        />
                       </div>
                     </div>
                   </>
@@ -5133,23 +5455,7 @@ export default function App() {
                           </span>
                         </button>
 
-                        {/* 3. Gift Coin Credit Welcome bonus */}
-                        <button
-                          onClick={() => {
-                            const updatedUser = { ...currentUser, coins: currentUser.coins + 500 };
-                            setCurrentUser(updatedUser);
-                            setUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-                            setIsAdminDrawerOpen(false);
-                            alert('تم شحن حسابك بـ 500 كوينز مجانية 🪙 لغرض تجربة إرسال جميع الهدايا الفاخرة!');
-                          }}
-                          className="w-full bg-[#03000a] hover:bg-slate-900 border border-slate-800 text-amber-300 py-2 px-4 rounded-xl text-xs font-bold flex justify-between items-center transition cursor-pointer active:scale-95"
-                        >
-                          <span>شحن +500 كوينز</span>
-                          <span className="flex items-center gap-1">
-                            <Coins className="w-4 h-4 text-amber-400" />
-                            شحن كوينزات تجريبية فورية
-                          </span>
-                        </button>
+
 
                         {/* 4. Disconnect simulation removed as Agora is disabled */}
                       </div>
@@ -6013,7 +6319,7 @@ export default function App() {
                         }`}
                       >
                         <span>👑</span>
-                        <span>إدارة الوكلاء والأرصدة</span>
+                        <span>إدارة الوكلاء والسلع</span>
                       </button>
                       
                       <button
@@ -6025,7 +6331,7 @@ export default function App() {
                         }`}
                       >
                         <span>💵</span>
-                        <span>رواتب المضيفين (المراجعة)</span>
+                        <span>الرواتب</span>
                       </button>
                     </div>
 
@@ -6761,6 +7067,8 @@ export default function App() {
                         </div>
                       );
                     })()}
+
+
                     </div>
                   </div>
                 </>

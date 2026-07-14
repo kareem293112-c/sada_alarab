@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, HelpCircle, Shield, Award, Sparkles, Gem, CheckCircle2, AlertTriangle, MessageSquare, Image, Users, Gift, Crown, Compass, Upload, RotateCcw, Sliders, Eye, Activity } from 'lucide-react';
 import { db } from '../../lib/firebase';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { AppUser } from '../../types';
 
 interface Props {
@@ -127,25 +127,6 @@ const VIP_LEVELS: VipLevelData[] = [
   }
 ];
 
-const PRESET_GIFS = [
-  {
-    name: '👑 التاج الذهبي الملكي',
-    url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Z2cGdyY2E4OWp2NGZ2MTg4dHd2djh4Z3hpZHgybDRoazM0NW9pNCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/X8y7gPhfF957O/giphy.gif'
-  },
-  {
-    name: '🛡️ الدرع النيون المضيء',
-    url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbmNodjhkdDFlNjhmd3Zud2txZHhqZ3R4bnlmdzJzZHRrNXZ5enFhMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/v8Y8ZtN18V97i/giphy.gif'
-  },
-  {
-    name: '💎 الماسة الدوارة الفخمة',
-    url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbjNidTh3ODJraHpnMW93cmkyZHZwdHB0dzhyZzMxZnp5dWszbnB3ciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/26FLdmIp6wJr9OUKs/giphy.gif'
-  },
-  {
-    name: '🌌 البوابة الكونية المشعة',
-    url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdm9hOTgycmttdjAydmE1aTZjNmt4c2h2OXdtczg3MmdrMnMxcnBycyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/3o7bu3XilJ5BOESgOk/giphy.gif'
-  }
-];
-
 // Helper to compress and resize base64 images so they don't exceed Firestore/LocalStorage quotas.
 const resizeAndCompressBase64 = (base64Str: string, maxDim = 320, quality = 0.7): Promise<string> => {
   return new Promise((resolve) => {
@@ -212,14 +193,6 @@ const resizeAndCompressBase64 = (base64Str: string, maxDim = 320, quality = 0.7)
   });
 };
 
-const BADGE_MAP: Record<number, string> = {
-  1: 'svg',
-  2: 'svg',
-  3: 'svg',
-  4: 'svg',
-  5: 'svg',
-};
-
 const convertToDirectImageUrl = (url: string): string => {
   if (!url) return '';
   let clean = url.trim();
@@ -276,49 +249,32 @@ const convertToDirectImageUrl = (url: string): string => {
 };
 
 const SVIPBadgeImage = ({ lvlNum, sizeClass = "w-48 h-48", customBadges }: { lvlNum: number; sizeClass?: string; customBadges?: Record<number, string> }) => {
-  const [imageStatus, setImageStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [vipConfig, setVipConfig] = useState<any>(null);
   const url = customBadges?.[lvlNum];
 
   useEffect(() => {
-    if (!url || !url.trim()) {
-      setImageStatus('error');
-      return;
-    }
+    const docRef = doc(db, "settings", "vip_config");
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setVipConfig(docSnap.data());
+      }
+    }, (err) => {
+      console.error("Error loading vip_config in VipView:", err);
+    });
+    return () => unsubscribe();
+  }, []);
 
-    const directUrl = convertToDirectImageUrl(url);
-    if (!directUrl) {
-      setImageStatus('error');
-      return;
-    }
+  // Determine custom width, height, and scale from configuration settings
+  const badgeConfig = vipConfig?.badges?.[lvlNum];
+  const yOffset = badgeConfig?.yOffset ?? 0;
+  const customStyles: React.CSSProperties = {
+    width: badgeConfig?.width ? `${badgeConfig.width}px` : undefined,
+    height: badgeConfig?.height ? `${badgeConfig.height}px` : undefined,
+    transform: `translateY(${yOffset}px) ${badgeConfig?.scale ? `scale(${badgeConfig.scale})` : ''}`,
+    transformOrigin: 'center',
+  };
 
-    // Validate direct image URL
-    const lower = directUrl.toLowerCase();
-    const isDirect = lower.startsWith('data:image/') || 
-                     lower.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|tiff|jfif)(\?.*)?$/) || 
-                     lower.includes('i.ibb.co/') || 
-                     lower.includes('i.imgur.com/') || 
-                     lower.includes('i.postimg.cc/') || 
-                     lower.includes('images.unsplash.com/');
-
-    if (!isDirect) {
-      setImageStatus('error');
-      return;
-    }
-
-    setImageStatus('loading');
-    const img = new window.Image();
-    img.src = directUrl;
-    img.referrerPolicy = 'no-referrer';
-    img.onload = () => {
-      setImageStatus('loaded');
-    };
-    img.onerror = () => {
-      console.warn(`Failed to preload VIP badge image for level ${lvlNum}: ${directUrl}`);
-      setImageStatus('error');
-    };
-  }, [url, lvlNum]);
-
-  if (url && url.trim() && imageStatus === 'loaded') {
+  if (url && url.trim()) {
     const directUrl = convertToDirectImageUrl(url);
     
     return (
@@ -326,224 +282,14 @@ const SVIPBadgeImage = ({ lvlNum, sizeClass = "w-48 h-48", customBadges }: { lvl
         src={directUrl} 
         alt={`SVIP ${lvlNum}`} 
         className={`${sizeClass} object-contain select-none flex-shrink-0 animate-fade-in mx-auto`}
+        style={customStyles}
         referrerPolicy="no-referrer"
       />
     );
   }
 
-  // Fallback to the beautiful dynamic SVG badge during loading/errors/invalid links
-  return <DefaultSVGShield lvlNum={lvlNum} sizeClass={sizeClass} />;
-};
-
-const DefaultSVGShield = ({ lvlNum, sizeClass }: { lvlNum: number; sizeClass: string }) => {
-  // Select colors and properties based on level
-  let gradId = "goldGrad";
-  let lightGradId = "goldLight";
-  let glowColor = "rgba(251, 191, 36, 0.4)";
-  let textColor = "#FFF8E1";
-  let label = "SVIP 1";
-  let emoji = "🛡️";
-  let shieldColor = "#FFE082";
-
-  if (lvlNum === 2) {
-    gradId = "emeraldGrad";
-    lightGradId = "emeraldLight";
-    glowColor = "rgba(16, 185, 129, 0.4)";
-    textColor = "#ECFDF5";
-    label = "SVIP 2";
-    emoji = "✨";
-    shieldColor = "#A7F3D0";
-  } else if (lvlNum === 3) {
-    gradId = "purpleGrad";
-    lightGradId = "purpleLight";
-    glowColor = "rgba(168, 85, 247, 0.4)";
-    textColor = "#F5F3FF";
-    label = "SVIP 3";
-    emoji = "💎";
-    shieldColor = "#E9D5FF";
-  } else if (lvlNum === 4) {
-    gradId = "blueGrad";
-    lightGradId = "blueLight";
-    glowColor = "rgba(59, 130, 246, 0.4)";
-    textColor = "#EFF6FF";
-    label = "SVIP 4";
-    emoji = "🔮";
-    shieldColor = "#BFDBFE";
-  } else if (lvlNum === 5) {
-    gradId = "roseGrad";
-    lightGradId = "roseLight";
-    glowColor = "rgba(244, 63, 94, 0.4)";
-    textColor = "#FFF1F2";
-    label = "SVIP 5";
-    emoji = "🔥";
-    shieldColor = "#FECDD3";
-  }
-
-  return (
-    <svg 
-      className={`${sizeClass} select-none flex-shrink-0 animate-fade-in mx-auto drop-shadow-lg`} 
-      viewBox="0 0 200 200" 
-      fill="none" 
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        {/* Glow Filter */}
-        <filter id={`glow-${lvlNum}`} x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="6" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
-        </filter>
-
-        {/* Level 1: Gold Metallic Gradient */}
-        <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FFE082" />
-          <stop offset="30%" stopColor="#FFB300" />
-          <stop offset="70%" stopColor="#FF8F00" />
-          <stop offset="100%" stopColor="#FF6F00" />
-        </linearGradient>
-        <linearGradient id="goldLight" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#FFF8E1" />
-          <stop offset="50%" stopColor="#FFE082" />
-          <stop offset="100%" stopColor="#FFD54F" />
-        </linearGradient>
-
-        {/* Level 2: Emerald Metallic Gradient */}
-        <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#A7F3D0" />
-          <stop offset="30%" stopColor="#34D399" />
-          <stop offset="70%" stopColor="#059669" />
-          <stop offset="100%" stopColor="#064E3B" />
-        </linearGradient>
-        <linearGradient id="emeraldLight" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#ECFDF5" />
-          <stop offset="50%" stopColor="#A7F3D0" />
-          <stop offset="100%" stopColor="#6EE7B7" />
-        </linearGradient>
-
-        {/* Level 3: Purple Gradient */}
-        <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#E9D5FF" />
-          <stop offset="30%" stopColor="#C084FC" />
-          <stop offset="70%" stopColor="#9333EA" />
-          <stop offset="100%" stopColor="#581C87" />
-        </linearGradient>
-        <linearGradient id="purpleLight" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#F5F3FF" />
-          <stop offset="50%" stopColor="#DDD6FE" />
-          <stop offset="100%" stopColor="#C084FC" />
-        </linearGradient>
-
-        {/* Level 4: Blue Gradient */}
-        <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#BFDBFE" />
-          <stop offset="30%" stopColor="#60A5FA" />
-          <stop offset="70%" stopColor="#2563EB" />
-          <stop offset="100%" stopColor="#1E3A8A" />
-        </linearGradient>
-        <linearGradient id="blueLight" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#EFF6FF" />
-          <stop offset="50%" stopColor="#93C5FD" />
-          <stop offset="100%" stopColor="#60A5FA" />
-        </linearGradient>
-
-        {/* Level 5: Rose/Flame Gradient */}
-        <linearGradient id="roseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FECDD3" />
-          <stop offset="30%" stopColor="#FB7185" />
-          <stop offset="70%" stopColor="#E11D48" />
-          <stop offset="100%" stopColor="#881337" />
-        </linearGradient>
-        <linearGradient id="roseLight" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#FFF1F2" />
-          <stop offset="50%" stopColor="#FDA4AF" />
-          <stop offset="100%" stopColor="#FB7185" />
-        </linearGradient>
-      </defs>
-
-      {/* Ambient background glow circle */}
-      <circle cx="100" cy="110" r="60" fill={glowColor} filter={`url(#glow-${lvlNum})`} opacity="0.6" />
-
-      {/* Wings / Aura behind shield */}
-      <g opacity="0.95">
-        {/* Left Wing */}
-        <path 
-          d="M 65 110 C 35 100, 20 75, 10 95 C 5 105, 15 125, 45 135 C 55 138, 65 130, 65 110 Z" 
-          fill={`url(#${gradId})`} 
-        />
-        <path 
-          d="M 60 115 C 38 108, 28 90, 20 102 C 16 108, 24 122, 45 128 C 52 130, 60 125, 60 115 Z" 
-          fill={`url(#${lightGradId})`} 
-        />
-        
-        {/* Right Wing */}
-        <path 
-          d="M 135 110 C 165 100, 180 75, 190 95 C 195 105, 185 125, 155 135 C 145 138, 135 130, 135 110 Z" 
-          fill={`url(#${gradId})`} 
-        />
-        <path 
-          d="M 140 115 C 162 108, 172 90, 180 102 C 184 108, 176 122, 155 128 C 148 130, 140 125, 140 115 Z" 
-          fill={`url(#${lightGradId})`} 
-        />
-      </g>
-
-      {/* Main Shield / Diamond Body */}
-      <path 
-        d="M 100 45 L 155 75 L 150 140 L 100 175 L 50 140 L 45 75 Z" 
-        fill="#121016" 
-        stroke={`url(#${gradId})`} 
-        strokeWidth="6"
-        strokeLinejoin="round" 
-      />
-
-      {/* Inner Shield Accent */}
-      <path 
-        d="M 100 55 L 143 78 L 139 130 L 100 160 L 61 130 L 57 78 Z" 
-        fill="transparent" 
-        stroke={`url(#${lightGradId})`} 
-        strokeWidth="2.5" 
-        strokeLinejoin="round" 
-        opacity="0.8"
-      />
-
-      {/* Decorative Golden Star at the top apex of shield */}
-      <polygon points="100,32 103,40 111,40 105,45 107,53 100,48 93,53 95,45 89,40 97,40" fill={`url(#${lightGradId})`} />
-
-      {/* Starburst pattern behind text */}
-      <circle cx="100" cy="110" r="35" fill="black" opacity="0.4" />
-      <circle cx="100" cy="110" r="30" fill={`url(#${gradId})`} opacity="0.15" />
-
-      {/* Center Circle Frame */}
-      <circle cx="100" cy="110" r="28" fill="#181520" stroke={`url(#${gradId})`} strokeWidth="3" />
-      <circle cx="100" cy="110" r="24" fill="transparent" stroke={`url(#${lightGradId})`} strokeWidth="1" opacity="0.6" />
-
-      {/* Emoji/Icon in the middle */}
-      <text x="100" y="105" textAnchor="middle" dominantBaseline="middle" fontSize="22" filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.5))">
-        {emoji}
-      </text>
-
-      {/* SVIP Label Text */}
-      <text 
-        x="100" 
-        y="134" 
-        textAnchor="middle" 
-        dominantBaseline="middle" 
-        fill={textColor} 
-        fontSize="12.5" 
-        fontWeight="900" 
-        fontFamily="sans-serif"
-        letterSpacing="0.5"
-        style={{ textShadow: `0px 0px 8px ${glowColor}, 0px 2px 3px black` }}
-      >
-        {label}
-      </text>
-
-      {/* Corner Sparkle Stars */}
-      <g fill="#FFF">
-        <polygon points="45,60 47,65 52,65 48,68 49,73 45,70 41,73 42,68 38,65 43,65" opacity="0.9" />
-        <polygon points="155,60 157,65 162,65 158,68 159,73 155,70 151,73 152,68 148,65 153,65" opacity="0.9" />
-        <polygon points="100,185 101,188 104,188 102,190 103,193 100,191 97,193 98,190 96,188 99,188" opacity="0.7" />
-      </g>
-    </svg>
-  );
+  // If no custom URL is configured, we return null to only display user images as requested
+  return null;
 };
 
 const renderSVIPBadge = (lvlNum: number, sizeClass = "w-48 h-48", customBadges?: Record<number, string>) => {
@@ -572,6 +318,61 @@ export default function VipView({ onBack, currentUser }: Props) {
     4: '',
     5: '',
   });
+
+  const [vipConfig, setVipConfig] = useState<any>(null);
+  const [isCalibrating, setIsCalibrating] = useState(true);
+
+  useEffect(() => {
+    const docRef = doc(db, "settings", "vip_config");
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setVipConfig(docSnap.data());
+      } else {
+        setVipConfig({
+          frames: {
+            1: { width: 44, height: 44, scale: 1.0 },
+            2: { width: 44, height: 44, scale: 1.0 },
+            3: { width: 44, height: 44, scale: 1.0 },
+            4: { width: 44, height: 44, scale: 1.0 },
+            5: { width: 44, height: 44, scale: 1.0 }
+          },
+          badges: {
+            1: { width: 150, height: 150, scale: 1.0 },
+            2: { width: 150, height: 150, scale: 1.0 },
+            3: { width: 150, height: 150, scale: 1.0 },
+            4: { width: 150, height: 150, scale: 1.0 },
+            5: { width: 150, height: 150, scale: 1.0 }
+          }
+        });
+      }
+    }, (err) => {
+      console.error("Error subscribing to vip_config in VipView:", err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleUpdateVipConfig = async (type: 'frames' | 'badges', level: number, field: 'width' | 'height' | 'scale', value: number) => {
+    if (!vipConfig) return;
+    const updated = {
+      ...vipConfig,
+      [type]: {
+        ...vipConfig[type],
+        [level]: {
+          ...vipConfig[type][level],
+          [field]: value
+        }
+      }
+    };
+    
+    setVipConfig(updated);
+    
+    try {
+      const docRef = doc(db, "settings", "vip_config");
+      await setDoc(docRef, updated);
+    } catch (err) {
+      console.error("Error updating vip_config in Firestore from VipView:", err);
+    }
+  };
 
   // Fetch custom badges from Firestore & LocalStorage
   useEffect(() => {
@@ -647,24 +448,6 @@ export default function VipView({ onBack, currentUser }: Props) {
 
   const activeLevel = VIP_LEVELS[selectedLvlIdx];
   
-  // Safely get and fallback 2.5D config parameters
-  const getLevelConfig = (lvlNum: number) => {
-    return {
-      url: BADGE_MAP[lvlNum] || '',
-      selectedStyle: 'default',
-      rotateX: 12,
-      rotateY: -12,
-      rotateZ: 0,
-      scale: 1.0,
-      glowIntensity: 35,
-      glowColor: '#fbbf24',
-      depthOffset: 12,
-      animationStyle: 'float',
-      animationDuration: 3
-    };
-  };
-
-  const currentLevelConfig = getLevelConfig(activeLevel.level);
   const userVipLevel = currentUser?.vipLevel || 0;
   const isCurrentlyActive = userVipLevel >= activeLevel.level;
 
@@ -777,14 +560,7 @@ export default function VipView({ onBack, currentUser }: Props) {
             <span className="text-[7px] text-amber-300">◆</span>
           </button>
 
-          {/* Center Action: Edit Badges (تعديل الشارات) for Admins/Agents */}
-          <button 
-            onClick={() => setIsEditBadgesModalOpen(true)}
-            className="bg-gradient-to-b from-[#d97706] to-[#78350f] border border-amber-400 text-white font-black text-[9px] px-3.5 py-2 rounded-xl flex items-center justify-center gap-1 shadow-lg transition-all active:scale-95 cursor-pointer hover:brightness-110 z-20"
-          >
-            <Sliders className="w-3 h-3 text-amber-200" />
-            <span>تعديل الشارات</span>
-          </button>
+
 
           {/* Left Action: Record (سجل) */}
           <button 
@@ -949,6 +725,8 @@ export default function VipView({ onBack, currentUser }: Props) {
         </div>
 
       </div>
+
+
 
       {/* Success / Error Notification banners */}
       <div className="px-4 pt-4">
@@ -1194,181 +972,6 @@ export default function VipView({ onBack, currentUser }: Props) {
                 className="w-full py-2 bg-gradient-to-l from-amber-500 to-orange-600 hover:opacity-90 text-white font-black text-xs rounded-xl transition"
               >
                 رجوع
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Badge Images Modal */}
-      {isEditBadgesModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-[#121118] border border-white/10 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-fade-in text-right">
-            <div className="bg-gradient-to-l from-amber-500 to-orange-600 p-4 text-slate-950 flex items-center justify-between">
-              <button 
-                onClick={() => setIsEditBadgesModalOpen(false)}
-                className="p-1 hover:bg-black/10 rounded-full transition text-slate-950 font-bold"
-              >
-                ✕
-              </button>
-              <h3 className="font-black text-xs flex items-center gap-1.5">
-                ⚙️ تعديل صور شارات الـ SVIP
-              </h3>
-            </div>
-            
-            <div className="p-4 space-y-3.5 max-h-[60vh] overflow-y-auto text-slate-300">
-              <p className="text-[10px] font-semibold text-slate-400 leading-relaxed">
-                تستطيع تغيير وتعديل صور الشارات الخاصة بـ SVIP 1 حتى SVIP 5 عن طريق وضع روابط الصور المباشرة. اترك الحقل فارغاً للرجوع للبديل الجمالي ثلاثي الأبعاد (SVG).
-              </p>
-
-              {/* Direct link instructions alert */}
-              <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl space-y-1 text-[9px] font-bold text-amber-300 leading-normal">
-                <p>💡 كيف تحصل على "الرابط المباشر" الصحيح؟</p>
-                <ul className="list-disc list-inside space-y-0.5 text-slate-300 font-medium text-[8px]">
-                  <li>عند الرفع على <span className="text-amber-400">ImgBB (ibb.co)</span>، يجب نسخ خيار <span className="text-amber-400">"الرابط المباشر" (Direct link)</span>.</li>
-                  <li>يجب أن يبدأ الرابط بـ <span className="text-amber-400">https://i.ibb.co/</span> أو ينتهي بامتداد الصورة مثل <span className="text-amber-400">.png</span> أو <span className="text-amber-400">.jpg</span>.</li>
-                  <li>إذا كان الرابط غير صالح أو به خلل، فسيقوم النظام تلقائياً بحماية مظهر التطبيق والرجوع للشارات الافتراضية الأنيقة بدلاً من إظهار أيقونة مكسورة!</li>
-                </ul>
-              </div>
-
-              {[1, 2, 3, 4, 5].map((lvlNum) => (
-                <div key={lvlNum} className="space-y-1 p-2.5 bg-white/5 border border-white/5 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-amber-400">شارات SVIP {lvlNum}</span>
-                    <div className="w-8 h-8 rounded-lg overflow-hidden bg-black/40 flex items-center justify-center">
-                      {badgeInputs[lvlNum] ? (
-                        <img 
-                          src={convertToDirectImageUrl(badgeInputs[lvlNum])} 
-                          alt="preview" 
-                          className="w-full h-full object-contain"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <span className="text-[8px] text-slate-500">SVG</span>
-                      )}
-                    </div>
-                  </div>
-                  <input 
-                    type="text"
-                    value={badgeInputs[lvlNum] || ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      // Instantly convert if it looks like a complete copy-pasted URL
-                      if (val.trim().startsWith('http') || val.trim().includes('ibb.co/') || val.trim().includes('imgur.com/') || val.trim().includes('postimg.cc/') || val.trim().includes('postimages.org/')) {
-                        const converted = convertToDirectImageUrl(val);
-                        setBadgeInputs({ ...badgeInputs, [lvlNum]: converted });
-                      } else {
-                        setBadgeInputs({ ...badgeInputs, [lvlNum]: val });
-                      }
-                    }}
-                    onBlur={(e) => {
-                      // Ensure conversion runs on focus loss for any typed text
-                      const converted = convertToDirectImageUrl(e.target.value);
-                      setBadgeInputs({ ...badgeInputs, [lvlNum]: converted });
-                    }}
-                    placeholder="ضع رابط الصورة المباشر هنا..."
-                    className="w-full bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition text-left"
-                    style={{ direction: 'ltr' }}
-                  />
-                  {badgeInputs[lvlNum] && (() => {
-                    const url = badgeInputs[lvlNum];
-                    const converted = convertToDirectImageUrl(url);
-                    const lower = converted.trim().toLowerCase();
-                    
-                    if (lower.includes('ibb.co/') && !lower.includes('i.ibb.co/')) {
-                      return (
-                        <p className="text-[8px] text-amber-400 font-bold leading-normal mt-1 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
-                          ⚠️ هذا رابط صفحة عرض لـ ImgBB وليس رابط الصورة المباشر. يرجى استخدام "الرابط المباشر" الذي يبدأ بـ <span className="underline font-mono">https://i.ibb.co/</span>.
-                        </p>
-                      );
-                    }
-                    if (lower.includes('postimg.cc/') || lower.includes('postimages.org/')) {
-                      return (
-                        <p className="text-[8px] text-amber-400 font-bold leading-normal mt-1 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
-                          ⚠️ هذا رابط صفحة عرض لـ Postimages. يرجى استخدام "الرابط المباشر" الذي ينتهي بامتداد الصورة.
-                        </p>
-                      );
-                    }
-                    if (lower.includes('imgur.com/') && !lower.includes('i.imgur.com/')) {
-                      return (
-                        <p className="text-[8px] text-amber-400 font-bold leading-normal mt-1 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
-                          ⚠️ هذا رابط صفحة عرض لـ Imgur. يرجى استخدام "الرابط المباشر" الذي يبدأ بـ <span className="underline font-mono">https://i.imgur.com/</span>.
-                        </p>
-                      );
-                    }
-                    
-                    const isDirect = lower.startsWith('data:image/') || 
-                                     lower.match(/\.(png|jpg|jpeg|gif|webp|svg|bmp|tiff|jfif)(\?.*)?$/) || 
-                                     lower.includes('i.ibb.co/') || 
-                                     lower.includes('i.imgur.com/') || 
-                                     lower.includes('i.postimg.cc/');
-
-                    if (!isDirect) {
-                      return (
-                        <p className="text-[8px] text-rose-300 font-semibold leading-normal mt-1 bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/20">
-                          ⚠️ تنبيه: قد لا يكون هذا الرابط رابطاً مباشراً للصورة. يرجى استخدام رابط مباشر ينتهي بامتداد صورة لضمان ظهور الشارة.
-                        </p>
-                      );
-                    }
-                    return (
-                      <p className="text-[8px] text-emerald-400 font-bold leading-normal mt-1 bg-emerald-500/10 p-1 rounded-lg border border-emerald-500/20 flex items-center gap-1 justify-center">
-                        ✓ رابط مباشر ممتاز وصالح!
-                      </p>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-
-            <div className="p-4 bg-white/5 border-t border-white/5 flex gap-2">
-              <button 
-                onClick={async () => {
-                  try {
-                    // Normalize and clean all inputs before saving
-                    const cleanedBadges: Record<number, string> = {
-                      1: convertToDirectImageUrl(badgeInputs[1] || ''),
-                      2: convertToDirectImageUrl(badgeInputs[2] || ''),
-                      3: convertToDirectImageUrl(badgeInputs[3] || ''),
-                      4: convertToDirectImageUrl(badgeInputs[4] || ''),
-                      5: convertToDirectImageUrl(badgeInputs[5] || ''),
-                    };
-                    
-                    setCustomBadges(cleanedBadges);
-                    setBadgeInputs(cleanedBadges);
-                    
-                    const docRef = doc(db, "settings", "vip_badges");
-                    try {
-                      const { setDoc } = await import('firebase/firestore');
-                      await setDoc(docRef, cleanedBadges);
-                    } catch (dbErr) {
-                      console.error("Firestore settings save failed:", dbErr);
-                    }
-                    
-                    setSuccessMsg("🎉 تم حفظ روابط شارات الـ SVIP الجديدة بنجاح!");
-                    setIsEditBadgesModalOpen(false);
-                    setTimeout(() => setSuccessMsg(''), 4000);
-                  } catch (err) {
-                    console.error("Error saving badges:", err);
-                    setErrorMsg("حدث خطأ أثناء حفظ الشارات.");
-                    setTimeout(() => setErrorMsg(''), 4000);
-                  }
-                }}
-                className="flex-grow py-2 bg-gradient-to-l from-amber-400 to-orange-500 hover:opacity-90 text-slate-950 font-black text-xs rounded-xl transition"
-              >
-                حفظ التغييرات
-              </button>
-              
-              <button 
-                onClick={() => {
-                  const defaultInputs = { 1: '', 2: '', 3: '', 4: '', 5: '' };
-                  setBadgeInputs(defaultInputs);
-                }}
-                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-slate-300 font-black text-[10px] rounded-xl transition border border-white/10"
-              >
-                مسح الكل
               </button>
             </div>
           </div>

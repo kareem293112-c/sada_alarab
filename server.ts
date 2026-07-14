@@ -1,392 +1,465 @@
+import express from 'express';
 import cors from 'cors';
-import express from "express";
-import path from "path";
-import http from "http";
-import 'dotenv/config';
-import agoraToken from 'agora-access-token';
-const RtcTokenBuilder = (agoraToken as any).RtcTokenBuilder || (agoraToken as any).default?.RtcTokenBuilder;
-const RtcRole = (agoraToken as any).RtcRole || (agoraToken as any).default?.RtcRole;
-import { WebSocketServer, WebSocket } from "ws";
-import { createServer as createViteServer } from "vite";
-import { initializeApp, getApps, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { GoogleAuth } from "google-auth-library";
+import dotenv from 'dotenv';
+import path from 'path';
+import admin from 'firebase-admin';
+import { createServer as createHttpServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 
-// Dynamic PORT assignment for Render or any platform
-const PORT = Number(process.env.PORT) || 3000;
-
-// Initialize Firebase Admin SDK lazily with fallback
-let firestoreDbInstance: any = null;
-let firebaseInitialized = false;
-let firestoreDisabled = false;
-
-async function checkFirestoreAccess() {
-  if (firestoreDisabled) return;
-  try {
-    try {
-      const auth = new GoogleAuth();
-      await auth.getApplicationDefault();
-    } catch (credentialError: any) {
-      console.warn("⚠️ Google Application Default Credentials are not available. Local DB active.");
-      firestoreDbInstance = null;
-      firebaseInitialized = true;
-      firestoreDisabled = true;
-      return;
-    }
-
-    const apps = getApps();
-    const customDbId = "ai-studio-sadaalarabvoiceb-5f452604-580f-4265-ab18-da9c404b3698";
-    const projectId = "gen-lang-client-0348881645";
-    
-    let app;
-    if (apps.length === 0) {
-      app = initializeApp({
-        credential: applicationDefault(),
-        projectId: projectId
-      });
-    } else {
-      app = apps[0];
-    }
-
-    const tempDb = getFirestore(app, customDbId);
-    await tempDb.collection("users").limit(1).get();
-    
-    firestoreDbInstance = tempDb;
-    firebaseInitialized = true;
-    console.log("Firestore connection verified. Operating in Cloud Database mode.");
-  } catch (error: any) {
-    console.log("Firestore is offline or unauthorized. Operating in secure Local JSON storage mode.");
-    firestoreDbInstance = null;
-    firebaseInitialized = true;
-    firestoreDisabled = true;
-  }
-}
-
-function getFirestoreDb() {
-  if (firestoreDisabled || !firebaseInitialized) return null;
-  return firestoreDbInstance;
-}
+dotenv.config();
 
 const app = express();
 
+// Configure robust CORS
 app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+  origin: [
+    'https://wif.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://ais-dev-qts7zckbddelnrwnra7g7o-150385904306.europe-west2.run.app',
+    'https://ais-pre-qts7zckbddelnrwnra7g7o-150385904306.europe-west2.run.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-userid'],
+  credentials: true
 }));
 
 app.use(express.json());
 
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+// Lazy Firebase Database Getter to prevent crashes on startup/boot validation
+let dbInstance: admin.firestore.Firestore | null = null;
 
-interface CustomWebSocket extends WebSocket {
-  roomId?: string;
-  userId?: string;
-  userName?: string;
-}
+function getDb(): admin.firestore.Firestore {
+  if (dbInstance) return dbInstance;
 
-const roomClients = new Map<string, Set<CustomWebSocket>>();
+  const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const projectId = "gen-lang-client-0348881645";
+  const databaseId = "ai-studio-sadaalarabvoiceb-5f452604-580f-4265-ab18-da9c404b3698";
 
-// Broadcast to room helper
-function broadcastToRoom(roomId: string, message: any, excludeClient?: CustomWebSocket) {
-  const clients = roomClients.get(roomId);
-  if (!clients) return;
-  const msgString = JSON.stringify(message);
-  for (const client of clients) {
-    if (client !== excludeClient && client.readyState === WebSocket.OPEN) {
-      client.send(msgString);
+  if (serviceAccountVar && serviceAccountVar.trim()) {
+    try {
+      const serviceAccount = JSON.parse(serviceAccountVar.trim());
+      if (admin.apps.length === 0) {
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          projectId: serviceAccount.project_id || projectId
+        });
+      }
+      const firestoreInstance = admin.firestore();
+      firestoreInstance.settings({ databaseId });
+      dbInstance = firestoreInstance;
+      console.log("[FIREBASE] Admin initialized with Service Account and Custom Database ID");
+      return dbInstance;
+    } catch (err: any) {
+      console.error("[FIREBASE ERROR] Failed to initialize with FIREBASE_SERVICE_ACCOUNT:", err.message);
     }
   }
-}
 
-// Broadcast active room users list to everyone in that room
-function broadcastRoomUsers(roomId: string) {
-  const clients = roomClients.get(roomId);
-  if (!clients) return;
-  const activeUsers: Array<{ id: string; name: string; avatar: string }> = [];
-  for (const client of clients) {
-    if (client.userId && client.readyState === WebSocket.OPEN) {
-      activeUsers.push({
-        id: client.userId,
-        name: client.userName || 'مستشار صدى',
-        avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${client.userId}`
+  // Fallback / Development mode when service account is not yet provided or parsed
+  try {
+    if (admin.apps.length === 0) {
+      admin.initializeApp({
+        projectId: projectId
       });
     }
+    const firestoreInstance = admin.firestore();
+    firestoreInstance.settings({ databaseId });
+    dbInstance = firestoreInstance;
+    console.log("[FIREBASE] Admin initialized with fallback config and Custom Database ID");
+    return dbInstance;
+  } catch (err: any) {
+    console.error("[FIREBASE ERROR] Gracefully caught initialization error to prevent startup crash:", err.message);
+    throw new Error("Database not configured. Please supply a valid FIREBASE_SERVICE_ACCOUNT environment variable.");
   }
-  const uniqueUsers = Array.from(new Map(activeUsers.map(item => [item.id, item])).values());
-  broadcastToRoom(roomId, {
-    type: "room_users_changed",
-    users: uniqueUsers
-  });
 }
 
-// WebSocket Connection Handler
-wss.on("connection", (ws: CustomWebSocket) => {
-  ws.on("message", async (messageBuffer) => {
+// Health Check API
+app.get('/api/health', async (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Define types for game state
+interface Bet {
+  userId: string;
+  optionId: string;
+  amount: number;
+}
+
+interface RoundHistory {
+  roundId: string;
+  winningOption: string;
+  multiplier: number;
+  timestamp: string;
+}
+
+// Global Game State
+let gameRound = {
+  id: Date.now().toString(),
+  phase: 'betting' as 'betting' | 'spinning' | 'result',
+  countdown: 20, // 20 seconds betting phase
+  winningOption: null as string | null,
+  activeBets: [] as Bet[],
+};
+
+let roundHistory: RoundHistory[] = [];
+let multiplierOptions = [
+  { id: 'pizza', name: '🍕 بيتزا', multiplier: 2, weight: 60 },
+  { id: 'burger', name: '🍔 برجر', multiplier: 3, weight: 30 },
+  { id: 'sushi', name: '🍣 سوشي', multiplier: 5, weight: 8 },
+  { id: 'cupcake', name: '🧁 كاب كيك', multiplier: 10, weight: 2 },
+];
+
+// Broadcast structures
+const sseClients = new Set<any>();
+let wss: WebSocketServer | null = null;
+
+function getGameStatePayload() {
+  return {
+    roundId: gameRound.id,
+    phase: gameRound.phase,
+    countdown: gameRound.countdown,
+    winningOption: gameRound.winningOption,
+    history: roundHistory,
+    totalBets: gameRound.activeBets.reduce((sum, b) => sum + b.amount, 0),
+    options: multiplierOptions.map(o => ({ id: o.id, name: o.name, multiplier: o.multiplier }))
+  };
+}
+
+function broadcastGameState() {
+  const data = JSON.stringify({
+    type: 'game_state',
+    data: getGameStatePayload()
+  });
+
+  // 1. Broadcast to SSE Clients
+  for (const res of sseClients) {
     try {
-      const data = JSON.parse(messageBuffer.toString());
-      const { action, roomId, userId, userName } = data;
-
-      if (action === "join") {
-        ws.roomId = roomId;
-        ws.userId = userId;
-        ws.userName = userName;
-
-        if (!roomClients.has(roomId)) {
-          roomClients.set(roomId, new Set());
-        }
-        roomClients.get(roomId)!.add(ws);
-
-        broadcastToRoom(roomId, {
-          type: "system_message",
-          text: `دخل ${userName} إلى المجلس`,
-          userId,
-          userName,
-          timestamp: new Date().toISOString()
-        }, ws);
-
-        ws.send(JSON.stringify({
-          type: "join_success",
-          roomId,
-          message: "تم الاتصال بالغرفة بنجاح!"
-        }));
-
-        broadcastRoomUsers(roomId);
-      }
-
-      else if (action === "leave") {
-        const savedRoomId = ws.roomId;
-        if (ws.roomId && roomClients.has(ws.roomId)) {
-          roomClients.get(ws.roomId)!.delete(ws);
-        }
-        if (savedRoomId) {
-          broadcastRoomUsers(savedRoomId);
-        }
-      }
-
-      else if (action === "register") {
-        ws.userId = userId;
-        ws.userName = userName;
-      }
-
-      else if (action === "chat_message") {
-        const { text, avatar, senderLevel } = data;
-        broadcastToRoom(roomId, {
-          type: "new_chat_message",
-          id: Math.random().toString(36).substring(7),
-          senderId: userId,
-          senderName: userName,
-          senderAvatar: avatar,
-          senderLevel,
-          text,
-          timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
-        });
-      }
-    } catch (e) {
-      console.error("Error processing websocket message:", e);
+      res.write(`data: ${data}\n\n`);
+    } catch (err) {
+      sseClients.delete(res);
     }
-  });
-
-  ws.on("close", () => {
-    const savedRoomId = ws.roomId;
-    if (ws.roomId && roomClients.has(ws.roomId)) {
-      roomClients.get(ws.roomId)!.delete(ws);
-    }
-    if (savedRoomId) {
-      broadcastRoomUsers(savedRoomId);
-    }
-  });
-});
-
-// REST API ENDPOINTS
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
-
-function getXpForLevel(level: number): number {
-  if (level <= 1) return 0;
-  let total = 0;
-  for (let i = 1; i < level; i++) {
-    total += Math.floor(Math.pow(i, 3) * 150) + 500;
   }
-  return total;
+
+  // 2. Broadcast to WebSockets
+  if (wss) {
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(data);
+        } catch (err) {
+          console.error("Error sending message to WebSocket client:", err);
+        }
+      }
+    });
+  }
 }
 
-function getLevelFromXp(xp: number): number {
-  if (!xp || xp < 0) return 1;
-  let level = 1;
-  while (level < 500) {
-    const nextXp = getXpForLevel(level + 1);
-    if (xp >= nextXp) {
-      level++;
-    } else {
-      break;
-    }
-  }
-  return level;
-}
+// Secure Firestore Transactions for payouts
+async function processPayouts() {
+  const winningOption = gameRound.winningOption;
+  if (!winningOption) return;
 
-app.post("/api/send-gift", async (req, res) => {
-  const { senderId, receiverId, giftCost } = req.body;
-  if (!senderId || !giftCost) {
-    return res.status(400).json({ error: "Missing senderId or giftCost" });
-  }
+  const currentOpt = multiplierOptions.find(o => o.id === winningOption);
+  const multiplier = currentOpt?.multiplier || 1;
 
-  const dbInstance = getFirestoreDb();
-  if (!dbInstance) {
-    // Fallback: If DB is inactive (local mode), return success and let the client handle local updates
-    return res.json({ success: true, fallback: true });
-  }
+  const winners = gameRound.activeBets.filter(b => b.optionId === winningOption);
+  console.log(`[GAME] Round completed: ${gameRound.id}. Winning item: ${winningOption}. Winners Count: ${winners.length}`);
 
-  try {
-    const senderRef = dbInstance.collection("users").doc(senderId);
-    
-    const result = await dbInstance.runTransaction(async (transaction: any) => {
-      const senderDoc = await transaction.get(senderRef);
-      if (!senderDoc.exists) {
-        throw new Error("Sender does not exist");
-      }
-      
-      const senderData = senderDoc.data() || {};
-      const currentCoins = senderData.coins || 0;
-      if (currentCoins < giftCost) {
-        throw new Error("Insufficient coins balance");
-      }
+  for (const bet of winners) {
+    try {
+      const firestoreDb = getDb();
+      const userRef = firestoreDb.collection('users').doc(bet.userId);
+      const reward = bet.amount * multiplier;
 
-      // Check if supporting themselves
-      if (receiverId && senderId === receiverId) {
-        const currentDiamonds = senderData.diamonds || 0;
-        const currentCharmXp = senderData.charmXp || 0;
-        const currentXp = senderData.xp || 0;
+      await firestoreDb.runTransaction(async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists) {
+          console.error(`User ${bet.userId} not found during payout.`);
+          return;
+        }
 
-        const newCoins = currentCoins - giftCost;
-        const newDiamonds = currentDiamonds + giftCost;
-        const newCharmXp = currentCharmXp + giftCost;
-        const newXp = currentXp + giftCost;
-        const newLevel = getLevelFromXp(newXp);
-        const newSenderXpSpent = (senderData.senderXp || 0) + giftCost;
+        const currentCoins = userDoc.data()?.coins || 0;
+        const newCoins = currentCoins + reward;
 
-        transaction.update(senderRef, {
+        // Atomically update user's coins and award dynamic XP (10% of reward amount)
+        const currentXp = userDoc.data()?.xp || 0;
+        const newXp = currentXp + Math.floor(reward * 0.1);
+
+        transaction.update(userRef, {
           coins: newCoins,
-          diamonds: newDiamonds,
-          charmXp: newCharmXp,
-          xp: newXp,
-          level: newLevel,
-          senderXp: newSenderXpSpent
-        });
-      } else {
-        // Deduct coins from sender and add sender XP
-        const newSenderCoins = currentCoins - giftCost;
-        const newSenderXp = (senderData.xp || 0) + giftCost;
-        const newSenderLevel = getLevelFromXp(newSenderXp);
-        const newSenderXpSpent = (senderData.senderXp || 0) + giftCost;
-
-        transaction.update(senderRef, {
-          coins: newSenderCoins,
-          xp: newSenderXp,
-          level: newSenderLevel,
-          senderXp: newSenderXpSpent
+          xp: newXp
         });
 
-        // If there is a receiver, award them diamonds and charmXp of the SAME VALUE as the gift cost!
-        if (receiverId) {
-          const receiverRef = dbInstance.collection("users").doc(receiverId);
-          const receiverDoc = await transaction.get(receiverRef);
-          if (receiverDoc.exists) {
-            const receiverData = receiverDoc.data() || {};
-            const currentDiamonds = receiverData.diamonds || 0;
-            const currentCharmXp = receiverData.charmXp || 0;
-            const currentXp = receiverData.xp || 0;
+        console.log(`[PAYOUT] Successfully credited user ${bet.userId} with ${reward} coins. New Balance: ${newCoins}`);
+      });
+    } catch (err) {
+      console.error(`[PAYOUT ERROR] Transaction failed for user ${bet.userId}:`, err);
+    }
+  }
+}
 
-            const newReceiverDiamonds = currentDiamonds + giftCost;
-            const newReceiverCharmXp = currentCharmXp + giftCost;
-            const newReceiverLevel = receiverData.level || getLevelFromXp(currentXp);
+// Background Game Loop Interval
+setInterval(async () => {
+  if (gameRound.phase === 'betting') {
+    gameRound.countdown--;
+    if (gameRound.countdown <= 0) {
+      // Transition to spinning phase
+      gameRound.phase = 'spinning';
+      gameRound.countdown = 5; // 5 seconds spin animation
 
-            transaction.update(receiverRef, {
-              diamonds: newReceiverDiamonds,
-              charmXp: newReceiverCharmXp,
-              xp: currentXp,
-              level: newReceiverLevel
-            });
-          }
+      // Determine the winner based on weighted random selection
+      const totalWeight = multiplierOptions.reduce((sum, opt) => sum + opt.weight, 0);
+      let randomValue = Math.random() * totalWeight;
+      let selectedOption = multiplierOptions[0];
+
+      for (const opt of multiplierOptions) {
+        randomValue -= opt.weight;
+        if (randomValue <= 0) {
+          selectedOption = opt;
+          break;
         }
       }
 
-      return { success: true };
+      gameRound.winningOption = selectedOption.id;
+      console.log(`[GAME LOOP] Wheel spinning... Chosen Winner: ${selectedOption.id}`);
+      broadcastGameState();
+    } else {
+      broadcastGameState();
+    }
+  } else if (gameRound.phase === 'spinning') {
+    gameRound.countdown--;
+    if (gameRound.countdown <= 0) {
+      // Transition to result showing and process transactions
+      gameRound.phase = 'result';
+      gameRound.countdown = 5; // 5 seconds display phase
+
+      // Run transactional payouts safely
+      await processPayouts();
+
+      // Log to history list
+      const winningOptObj = multiplierOptions.find(o => o.id === gameRound.winningOption);
+      roundHistory.unshift({
+        roundId: gameRound.id,
+        winningOption: gameRound.winningOption || 'pizza',
+        multiplier: winningOptObj?.multiplier || 2,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (roundHistory.length > 30) {
+        roundHistory.pop();
+      }
+
+      broadcastGameState();
+    } else {
+      broadcastGameState();
+    }
+  } else if (gameRound.phase === 'result') {
+    gameRound.countdown--;
+    if (gameRound.countdown <= 0) {
+      // Reset state for new round
+      gameRound = {
+        id: Date.now().toString(),
+        phase: 'betting',
+        countdown: 20,
+        winningOption: null,
+        activeBets: [],
+      };
+      console.log(`[GAME LOOP] New Round started: ${gameRound.id}`);
+      broadcastGameState();
+    } else {
+      broadcastGameState();
+    }
+  }
+}, 1000);
+
+// API Endpoint to Place a Bet (Secure Firestore Transaction)
+const placeBetHandler = async (req: express.Request, res: express.Response) => {
+  try {
+    const { userId, optionId, amount } = req.body;
+
+    if (!userId || !optionId || typeof amount !== 'number' || amount <= 0) {
+      res.status(400).json({ error: "Invalid parameters. Require: userId, optionId, amount" });
+      return;
+    }
+
+    if (gameRound.phase !== 'betting') {
+      res.status(400).json({ error: "Betting is closed for the current round!" });
+      return;
+    }
+
+    const validOption = multiplierOptions.find(o => o.id === optionId);
+    if (!validOption) {
+      res.status(400).json({ error: "Invalid betting option selected" });
+      return;
+    }
+
+    const firestoreDb = getDb();
+    const userRef = firestoreDb.collection('users').doc(userId);
+    let finalCoins = 0;
+
+    // Use transaction to verify balance and deduct bet amount atomically
+    await firestoreDb.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new Error("User does not exist in our system");
+      }
+
+      const currentCoins = userDoc.data()?.coins || 0;
+      if (currentCoins < amount) {
+        throw new Error("Insufficient coin balance!");
+      }
+
+      finalCoins = currentCoins - amount;
+      transaction.update(userRef, { coins: finalCoins });
     });
 
-    return res.json(result);
-  } catch (error: any) {
-    console.error("[SERVER] Error processing send-gift endpoint:", error);
-    return res.status(500).json({ error: error.message });
+    // Record bet in game memory
+    gameRound.activeBets.push({ userId, optionId, amount });
+    console.log(`[BET REGISTERED] User ${userId} bet ${amount} on ${optionId}. Remaining: ${finalCoins}`);
+
+    // Broadcast update immediately to show live bets updates
+    broadcastGameState();
+
+    res.json({
+      success: true,
+      message: "Bet placed successfully",
+      newBalance: finalCoins,
+      roundId: gameRound.id
+    });
+  } catch (err: any) {
+    console.error("[BET ERROR] Bet processing failed:", err);
+    res.status(500).json({ error: err.message });
   }
+};
+
+// Map both /api/placeBet and /api/game/bet to handle requests seamlessly
+app.post('/api/placeBet', placeBetHandler);
+app.post('/api/game/bet', placeBetHandler);
+
+// API Endpoint: Get Current Real-time Game State
+app.get('/api/game/state', (req, res) => {
+  res.json(getGameStatePayload());
 });
 
-app.get('/api/agora-token', (req, res) => {
-    const channelName = req.query.channelName as string;
-    const uidStr = req.query.uid as string;
+// SSE Stream Endpoint for Game Countdown Updates
+app.get('/api/game/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
 
-    if (!channelName) {
-        return res.status(400).json({ error: 'channelName is required' });
-    }
+  sseClients.add(res);
 
-    const appId = process.env.VITE_AGORA_APP_ID || "c7dfa22636da4b40980825480e3c090c";
-    const appCertificate = process.env.VITE_AGORA_APP_CERTIFICATE || "037e1422e2f644dfb7d57a7bc04bd25f";
-    
-    console.log(`[SERVER-AGORA] Token request for channel: ${channelName}, UID: ${uidStr}, AppID: ${appId.substring(0, 5)}...`);
+  // Send initial game state immediately
+  const initialPayload = JSON.stringify({
+    type: 'game_state',
+    data: getGameStatePayload()
+  });
+  res.write(`data: ${initialPayload}\n\n`);
 
-    const uid = uidStr ? parseInt(uidStr, 10) : Math.floor(Math.random() * 1000000);
-    
-    if (!RtcTokenBuilder || !RtcRole) {
-        console.error("[SERVER-AGORA] Agora SDK components missing!");
-        return res.status(500).json({ error: 'Agora SDK not initialized on server' });
-    }
-
-    if (!appCertificate || appCertificate === "YOUR_CERTIFICATE_HERE") {
-        console.warn("[SERVER-AGORA] App Certificate missing or placeholder! Token will likely be invalid if project has certificate enabled.");
-    }
-
-    const role = RtcRole.PUBLISHER;
-    const expirationTimeInSeconds = 3600;
-    const currentTimestamp = Math.floor(Date.now() / 1000);
-    const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
-
-    try {
-        const token = RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channelName, uid, role, privilegeExpiredTs);
-        console.log("[SERVER-AGORA] Token generated successfully.");
-        return res.json({ token, uid });
-    } catch (error) {
-        console.error("[SERVER-AGORA] Token generation failed:", error);
-        return res.status(500).json({ error: 'Internal Server Error' });
-    }
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
 });
 
-// ==================== FRONTEND & STATIC SERVING ====================
-async function startApp() {
-  checkFirestoreAccess().catch((err) => {
-    console.error("Firestore connection check failed:", err);
+// Admin Dashboard: Get detailed game stats
+app.get('/api/admin/game-status', (req, res) => {
+  res.json({
+    gameState: gameRound,
+    history: roundHistory,
+    totalRegisteredSSE: sseClients.size,
+    totalWebSockets: wss ? wss.clients.size : 0,
+    config: multiplierOptions
+  });
+});
+
+// Admin: Force immediate spin result to a specific chosen option
+app.post('/api/admin/force-spin', (req, res) => {
+  const { optionId } = req.body;
+  if (gameRound.phase !== 'betting') {
+    res.status(400).json({ error: "Cannot force spin when not in betting phase!" });
+    return;
+  }
+
+  const validOption = multiplierOptions.find(o => o.id === optionId);
+  if (!validOption) {
+    res.status(400).json({ error: "Invalid force option id" });
+    return;
+  }
+
+  gameRound.phase = 'spinning';
+  gameRound.countdown = 5;
+  gameRound.winningOption = optionId;
+  console.log(`[ADMIN FORCE] Admin forced winning option to: ${optionId}`);
+  broadcastGameState();
+
+  res.json({ success: true, message: `Forced spin result to ${optionId}` });
+});
+
+// Admin: Configure win rate or weight configurations dynamically
+app.post('/api/admin/set-rate', (req, res) => {
+  const { optionId, weight, multiplier } = req.body;
+  const targetOption = multiplierOptions.find(o => o.id === optionId);
+
+  if (!targetOption) {
+    res.status(404).json({ error: "Option not found" });
+    return;
+  }
+
+  if (typeof weight === 'number') targetOption.weight = weight;
+  if (typeof multiplier === 'number') targetOption.multiplier = multiplier;
+
+  console.log(`[ADMIN CONFIG] Custom settings updated for ${optionId}: weight=${targetOption.weight}, mult=${targetOption.multiplier}`);
+  res.json({ success: true, option: targetOption });
+});
+
+// Create base HTTP server to attach WebSockets perfectly
+const httpServer = createHttpServer(app);
+
+// Initialize WebSockets server attached to the HTTP server
+wss = new WebSocketServer({ server: httpServer, path: '/ws/game' });
+
+wss.on('connection', (ws) => {
+  console.log('[WEBSOCKET] New client connected');
+
+  // Send current state on connection
+  ws.send(JSON.stringify({
+    type: 'game_state',
+    data: getGameStatePayload()
+  }));
+
+  ws.on('error', (err) => {
+    console.error('[WEBSOCKET ERROR]', err);
   });
 
-  if (process.env.NODE_ENV !== "production") {
+  ws.on('close', () => {
+    console.log('[WEBSOCKET] Client disconnected');
+  });
+});
+
+// Setup Vite middleware for development & static serving for production
+const isProd = process.env.NODE_ENV === 'production';
+
+async function startServer() {
+  if (!isProd) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    // Serve static frontend files built in dist
+    app.use(express.static(path.join(process.cwd(), 'dist')));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
     });
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Server successfully running on http://0.0.0.0:${PORT}`);
+  const PORT = process.env.PORT || 3000;
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running beautifully on http://0.0.0.0:${PORT}`);
   });
 }
 
-startApp().catch((err) => {
-  console.error("Failed to start server:", err);
-});
+startServer();
