@@ -410,6 +410,23 @@ const VipSizingTool = ({
   );
 };
 
+const GameContainer = ({ activeGameUrl }: { activeGameUrl: string }) => {
+  useEffect(() => {
+    console.log("GAME OPEN");
+    return () => console.log("GAME UNMOUNT");
+  }, []);
+
+  return (
+    <iframe
+      src={activeGameUrl}
+      className="w-full h-full border-0 bg-transparent"
+      title="Food Fortune Wheel Game"
+      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+      sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+    />
+  );
+};
+
 export default function App() {
   // Global States representing Database
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -440,10 +457,23 @@ export default function App() {
   };
 
   const [currentUser, _setCurrentUser] = useState<AppUser | null>(null);
+  const lastValidUserRef = useRef<AppUser | null>(null);
+
+  useEffect(() => {
+    if (currentUser) {
+      lastValidUserRef.current = currentUser;
+    }
+  }, [currentUser]);
+
   const setCurrentUser = (user: AppUser | null | ((prev: AppUser | null) => AppUser | null)) => {
+    const stack = new Error().stack;
     if (typeof user === 'function') {
       _setCurrentUser((prev) => {
         let res = user(prev);
+        console.log("[USER STATE] Updating user via function. Next state:", res ? `${res.name} (${res.id})` : "null", "\nStack Trace:\n", stack);
+        if (!res) {
+          console.warn("[USER STATE] WARNING: User is being set to null via function update!", "\nStack Trace:\n", stack);
+        }
         if (res) {
           const email = auth.currentUser?.email;
           const isPrivileged = 
@@ -462,6 +492,10 @@ export default function App() {
       });
     } else {
       let res = user;
+      console.log("[USER STATE] Setting user state to:", res ? `${res.name} (${res.id})` : "null", "\nStack Trace:\n", stack);
+      if (!res) {
+        console.warn("[USER STATE] WARNING: User is being set to null directly!", "\nStack Trace:\n", stack);
+      }
       if (res) {
         const email = auth.currentUser?.email;
         const isPrivileged = 
@@ -512,6 +546,10 @@ export default function App() {
   };
   const [rooms, setRooms] = useState<VoiceRoom[]>([]);
   const [activeRoom, setActiveRoom] = useState<VoiceRoom | null>(null);
+  const activeRoomRef = useRef<VoiceRoom | null>(null);
+  useEffect(() => {
+    activeRoomRef.current = activeRoom;
+  }, [activeRoom]);
   const [transactions, setTransactions] = useState<AgentTransferLog[]>([]);
   const [agentBalance, setAgentBalance] = useState<number>(0);
   const [agentsHub, setAgentsHub] = useState<{agent_id: string; agent_name: string; contact_whatsapp: string; is_active: boolean}[]>([]);
@@ -1513,14 +1551,17 @@ export default function App() {
 
   useEffect(() => {
     if (isGameSheetOpen) {
-      if (currentUser && currentUser.displayId && !activeGameUrl) {
-        const url = `https://oih-w0t5.onrender.com?displayId=${currentUser.displayId}&userId=${currentUser.displayId}&name=${encodeURIComponent(currentUser.name || "")}&avatarUrl=${encodeURIComponent(currentUser.avatar || "")}&avatar=${encodeURIComponent(currentUser.avatar || "")}&coins=${currentUser.coins}&balance=${currentUser.coins}`;
-        setActiveGameUrl(url);
+      if (!activeGameUrl) {
+        const user = currentUser || lastValidUserRef.current;
+        if (user && user.displayId) {
+          const url = `https://oih-w0t5.onrender.com?displayId=${user.displayId}&userId=${user.displayId}&name=${encodeURIComponent(user.name || "")}&avatarUrl=${encodeURIComponent(user.avatar || "")}&avatar=${encodeURIComponent(user.avatar || "")}&coins=${user.coins}&balance=${user.coins}`;
+          setActiveGameUrl(url);
+        }
       }
     } else {
       setActiveGameUrl(null);
     }
-  }, [isGameSheetOpen, currentUser?.displayId, activeGameUrl]);
+  }, [isGameSheetOpen, currentUser, activeGameUrl]);
 
   const [isQueueDrawerOpen, setIsQueueDrawerOpen] = useState(false);
   const [isNoiseCancellation, setIsNoiseCancellation] = useState(true);
@@ -4970,46 +5011,7 @@ export default function App() {
                   </>
                 )}
 
-                {/* INTERACTIVE GAME BOTTOM SHEET (FOOD FORTUNE WHEEL WEBVIEW) */}
-                {isGameSheetOpen && (
-                  <>
-                    <div
-                      className="absolute inset-0 bg-black/70 z-40 animate-fade-in cursor-pointer"
-                      onClick={() => setIsGameSheetOpen(false)}
-                    />
-                    <div className="absolute inset-x-0 bottom-0 h-[80%] max-h-[80%] bg-[#0d0722] border-t-2 border-indigo-500/40 rounded-t-[32px] z-50 animate-fade-in shadow-2xl flex flex-col overflow-hidden text-right">
-                      {/* Modern Bottom Sheet Header */}
-                      <div className="flex justify-between items-center bg-[#130d2e]/90 border-b border-purple-950/40 px-4 py-3 shrink-0 font-sans">
-                        <button
-                          onClick={() => setIsGameSheetOpen(false)}
-                          className="text-xs text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 px-3.5 py-1.5 rounded-full border border-slate-700/50 cursor-pointer active:scale-95 transition-all"
-                        >
-                          إغلاق
-                        </button>
-                        <h4 className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-indigo-200 to-amber-300 flex items-center gap-1.5">
-                          🎡 لعبة عجلة الحظ (Food Fortune Wheel)
-                        </h4>
-                      </div>
 
-                      {/* Game WebView Simulator Container */}
-                      <div className="flex-grow w-full bg-transparent relative">
-                        {activeGameUrl ? (
-                          <iframe
-                            src={activeGameUrl}
-                            className="w-full h-full border-0 bg-transparent"
-                            title="Food Fortune Wheel Game"
-                            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full w-full text-gray-400">
-                            جاري جلب بيانات الحساب والاتصال باللعبة...
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
 
                   {/* SEATS REQUESTS QUEUE BOTTOM SHEET */}
                   {isQueueDrawerOpen && (
@@ -7156,6 +7158,41 @@ export default function App() {
         </div>
 
       </main>
+
+      {/* INTERACTIVE GAME BOTTOM SHEET (FOOD FORTUNE WHEEL WEBVIEW) */}
+      {isGameSheetOpen && (
+        <div className="absolute inset-0 z-[100] flex flex-col justify-end">
+          <div
+            className="absolute inset-0 bg-black/70 animate-fade-in cursor-pointer"
+            onClick={() => setIsGameSheetOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 h-[80%] max-h-[80%] bg-[#0d0722] border-t-2 border-indigo-500/40 rounded-t-[32px] z-[110] animate-fade-in shadow-2xl flex flex-col overflow-hidden text-right">
+            {/* Modern Bottom Sheet Header */}
+            <div className="flex justify-between items-center bg-[#130d2e]/90 border-b border-purple-950/40 px-4 py-3 shrink-0 font-sans">
+              <button
+                onClick={() => setIsGameSheetOpen(false)}
+                className="text-xs text-slate-300 hover:text-white bg-slate-900/80 hover:bg-slate-800 px-3.5 py-1.5 rounded-full border border-slate-700/50 cursor-pointer active:scale-95 transition-all"
+              >
+                إغلاق
+              </button>
+              <h4 className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-indigo-200 to-amber-300 flex items-center gap-1.5">
+                🎡 لعبة عجلة الحظ (Food Fortune Wheel)
+              </h4>
+            </div>
+
+            {/* Game WebView Simulator Container */}
+            <div className="flex-grow w-full bg-transparent relative">
+              {activeGameUrl ? (
+                <GameContainer activeGameUrl={activeGameUrl} />
+              ) : (
+                <div className="flex items-center justify-center h-full w-full text-gray-400 font-sans">
+                  جاري جلب بيانات الحساب والاتصال باللعبة...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
