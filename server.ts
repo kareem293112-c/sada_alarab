@@ -179,6 +179,13 @@ io.on('connection', (socket) => {
 
     // Fetch user balance
     const db = getDb();
+    
+    // TEST: Verify DB connection
+    if (db) {
+      const test = await db.collection("users").where("displayId", "==", "50505").get();
+      console.log("USERS FOUND (TEST):", test.size);
+    }
+    
     let balance = 0;
     if (db) {
       try {
