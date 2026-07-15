@@ -144,7 +144,73 @@ app.get('/api/health', (req, res) => {
 // 9. Admin Dashboard API removed.
 
 
-// Legacy Socket.io and WebSocket setup removed.
+// 3. Game State Variables
+interface GamePlayer {
+  id: string;
+  name: string;
+  avatar: string;
+  balance: number;
+  isBot: boolean;
+}
+const activeRoomPlayers: Record<string, GamePlayer> = {};
+
+// Legacy Socket.io and WebSocket setup
+let io: SocketIOServer | null = null;
+io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('[SOCKET.IO] Client connected:', socket.id);
+
+  socket.on('client:connect', async (data) => {
+    console.log('[SOCKET.IO] Received client:connect', data);
+    const { displayId, name, avatarUrl } = data;
+
+    if (!displayId) {
+      console.error("Missing displayId in client:connect");
+      return;
+    }
+
+    // Fetch user balance
+    const db = getDb();
+    let balance = 0;
+    if (db) {
+      try {
+        // Query users collection where displayId == displayId
+        const usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
+        if (!usersSnapshot.empty) {
+          balance = usersSnapshot.docs[0].data().coins || 0;
+        }
+      } catch (e) {
+        console.error("Error fetching balance:", e);
+      }
+    }
+
+    // Update player mapping
+    activeRoomPlayers[displayId] = {
+      id: displayId,
+      name: name || 'Player',
+      avatar: avatarUrl || '',
+      balance: balance,
+      isBot: false
+    };
+
+    // Broadcast status
+    io!.emit('server:status', {
+      roomPlayers: activeRoomPlayers
+    });
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[SOCKET.IO] Client disconnected:', socket.id);
+  });
+});
+
 
 
 // Setup Vite development middleware & production static serving
