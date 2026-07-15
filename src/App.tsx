@@ -4989,13 +4989,18 @@ export default function App() {
 
                       {/* Game WebView Simulator Container */}
                       <div className="flex-grow w-full bg-transparent relative">
-                        <iframe
-                          src={`/game.html?userId=${auth.currentUser?.uid || currentUser?.id || ""}&name=${encodeURIComponent(currentUser?.name || "")}&avatarUrl=${encodeURIComponent(currentUser?.avatar || "")}&coins=${currentUser?.coins || 0}&roomId=${activeRoom?.id || ""}`}
-                          className="w-full h-full border-0 bg-transparent"
-                          title="Food Fortune Wheel Game"
-                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share; camera; microphone"
-                          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                        />
+                        {(() => {
+                          const gameUrl = `https://sdfghjkl-zgkx.onrender.com/?userId=${currentUser?.displayId || ""}&name=${encodeURIComponent(currentUser?.name || "Player")}&avatar=${encodeURIComponent(currentUser?.avatarUrl || currentUser?.photoURL || "")}`;
+                          return (
+                            <iframe
+                              src={gameUrl}
+                              className="w-full h-full border-0 bg-transparent"
+                              title="Food Fortune Wheel Game"
+                              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share; camera; microphone"
+                              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                            />
+                          );
+                        })()}
                       </div>
                     </div>
                   </>
