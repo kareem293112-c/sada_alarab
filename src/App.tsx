@@ -1,4 +1,3 @@
-import io, { Socket } from 'socket.io-client';
 import ProfileIndex from "./components/profile/ProfileIndex";
 /**
  * @license
@@ -1340,46 +1339,6 @@ export default function App() {
   // Agora RTC engine handles all high-fidelity real-time audio publishing and playback.
 
   // Microphone capture and streaming over Agora RTC Engine
-
-
-  // Socket.IO for real-time game sync
-  const [socket, setSocket] = useState<Socket | null>(null);
-  
-  useEffect(() => {
-    const newSocket = io(); // Connects to the same server URL
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log("[SOCKET.IO] Connected successfully");
-      newSocket.emit('game:join', {
-        displayId: "50505",
-        name: "Kareem"
-      });
-    });
-
-    newSocket.on('game:connected', (payload: any) => {
-      console.log("[CLIENT RECEIVED FULL PAYLOAD]", payload);
-      // setGameState(payload); // Assuming you have a gameState state
-
-      if (payload) {
-        // Map payload to AppUser
-        const updatedUser: AppUser = {
-          id: payload.userId || currentUser?.id || "50505",
-          name: payload.name || currentUser?.name || 'Player',
-          avatar: payload.avatar || currentUser?.avatar || '',
-          coins: payload.balance || currentUser?.coins || 0,
-          level: currentUser?.level || 1,
-          xp: currentUser?.xp || 0,
-        };
-        setCurrentUser(updatedUser);
-      }
-    });
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, []);
-
 
 
   // Track current user's specific seat status to prevent unnecessary microphone restarts when other users move

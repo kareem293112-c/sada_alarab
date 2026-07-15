@@ -35,7 +35,6 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
     "vite": "^6.2.3",
     "vite-plugin-node-polyfills": "^0.28.0",
     "ws": "^8.21.0"
