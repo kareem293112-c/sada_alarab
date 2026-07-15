@@ -4997,7 +4997,7 @@ export default function App() {
                       <div className="flex-grow w-full bg-transparent relative">
                         {currentUser && currentUser.displayId ? (
                           <iframe
-                            src={`https://sdfghjkl-zgkx.onrender.com/?displayId=${encodeURIComponent(currentUser.displayId)}&name=${encodeURIComponent(currentUser.name || "User")}&avatarUrl=${encodeURIComponent(currentUser.avatarUrl || "")}`}
+                            src={`https://sdfghjkl-zgkx.onrender.com/?displayId=${encodeURIComponent(currentUser.displayId)}&name=${encodeURIComponent(currentUser.name || "User")}&avatarUrl=${encodeURIComponent(currentUser.avatar || "")}`}
                             className="w-full h-full border-0 bg-transparent"
                             title="Food Fortune Wheel Game"
                             allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
