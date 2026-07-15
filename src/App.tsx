@@ -1554,7 +1554,7 @@ export default function App() {
       if (!activeGameUrl) {
         const user = currentUser || lastValidUserRef.current;
         if (user && user.displayId) {
-          const url = `https://oih-w0t5.onrender.com?displayId=${user.displayId}&userId=${user.displayId}&name=${encodeURIComponent(user.name || "")}&avatarUrl=${encodeURIComponent(user.avatar || "")}&avatar=${encodeURIComponent(user.avatar || "")}&coins=${user.coins}&balance=${user.coins}`;
+          const url = `/game.html?displayId=${user.displayId}&userId=${user.displayId}&name=${encodeURIComponent(user.name || "")}&avatarUrl=${encodeURIComponent(user.avatar || "")}&avatar=${encodeURIComponent(user.avatar || "")}&coins=${user.coins}&balance=${user.coins}`;
           setActiveGameUrl(url);
         }
       }

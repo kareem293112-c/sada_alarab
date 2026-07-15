@@ -136,17 +136,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Legacy game logic variables and functions removed.
+// =========================================================================
+// 3. Game State & Real-time Loop Configuration
+// =========================================================================
 
-
-// 8. Legacy Game API Routes removed.
-// SSE and game endpoints were here.
-
-
-// 9. Admin Dashboard API removed.
-
-
-// 3. Game State Variables
 interface GamePlayer {
   id: string;
   name: string;
@@ -154,9 +147,363 @@ interface GamePlayer {
   balance: number;
   isBot: boolean;
 }
+
 const activeRoomPlayers: Record<string, GamePlayer> = {};
 
-// Legacy Socket.io and WebSocket setup
+// Ensure bot_1 is always in room players for game companion UI
+const botPlayer: GamePlayer = {
+  id: "bot_1",
+  name: "المحترف 👑",
+  avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=bot_1",
+  balance: 25000,
+  isBot: true
+};
+
+interface GameState {
+  round: number;
+  phase: 'betting' | 'spinning' | 'result';
+  timer: number;
+  winningFood: string | null;
+  totalBets: Record<string, number>;
+  userBets: Record<string, Record<string, number>>; // userId -> foodId -> amount
+  allBetsList: Array<{ id: string; userId: string; username: string; avatar: string; foodId: string; amount: number }>;
+  history: string[];
+}
+
+let gameState: GameState = {
+  round: 1993,
+  phase: 'betting',
+  timer: 15,
+  winningFood: null,
+  totalBets: {},
+  userBets: {},
+  allBetsList: [],
+  history: ['pizza', 'burger', 'salad', 'sushi', 'chicken']
+};
+
+const FOODS_LIST = ['chicken', 'sushi', 'salad', 'burger', 'steak', 'watermelon', 'cake', 'pizza'];
+
+const FOOD_MULTIPLIERS: Record<string, number> = {
+  chicken: 45,
+  sushi: 25,
+  salad: 5,
+  burger: 10,
+  steak: 5,
+  watermelon: 5,
+  cake: 5,
+  pizza: 15
+};
+
+// SSE Clients Set
+const sseClients = new Set<any>();
+
+function getCombinedRoomPlayers(): GamePlayer[] {
+  const players = Object.values(activeRoomPlayers);
+  if (!players.some(p => p.id === 'bot_1')) {
+    players.push(botPlayer);
+  }
+  return players;
+}
+
+function broadcastState() {
+  const payload = JSON.stringify({
+    ...gameState,
+    roomPlayers: getCombinedRoomPlayers()
+  });
+  
+  for (const res of sseClients) {
+    try {
+      res.write(`data: ${payload}\n\n`);
+    } catch (err) {
+      sseClients.delete(res);
+    }
+  }
+}
+
+// Start Game Loop Interval
+setInterval(async () => {
+  if (gameState.phase === 'betting') {
+    if (gameState.timer > 0) {
+      gameState.timer--;
+    } else {
+      // Transition to spinning
+      gameState.phase = 'spinning';
+      gameState.timer = 5;
+      
+      const randomIndex = Math.floor(Math.random() * FOODS_LIST.length);
+      gameState.winningFood = FOODS_LIST[randomIndex];
+      
+      console.log(`🎡 [GAME RESULT] Round: ${gameState.round} | Winning Food: ${gameState.winningFood}`);
+    }
+  } else if (gameState.phase === 'spinning') {
+    if (gameState.timer > 0) {
+      gameState.timer--;
+    } else {
+      // Transition to result
+      gameState.phase = 'result';
+      gameState.timer = 5;
+      
+      const winningFood = gameState.winningFood!;
+      const multiplier = FOOD_MULTIPLIERS[winningFood] || 1;
+      
+      console.log(`🏁 [PROCESSING ROUND RESULT] Round: ${gameState.round} completed. Winning Food: ${winningFood}`);
+      
+      // Process wins in database
+      for (const [userId, bets] of Object.entries(gameState.userBets)) {
+        const betAmount = bets[winningFood] || 0;
+        if (betAmount > 0) {
+          const reward = betAmount * multiplier;
+          console.log(`🏆 [WIN EVENT RECEIVED] User: ${userId} won! Bet on ${winningFood}: ${betAmount} | Reward: ${reward}`);
+          
+          const db = getDb();
+          if (db) {
+            try {
+              let userDocRef: any;
+              const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+              if (usersSnapshot.empty) {
+                userDocRef = db.collection('users').doc(userId);
+              } else {
+                userDocRef = usersSnapshot.docs[0].ref;
+              }
+              
+              let finalBalance = 0;
+              await db.runTransaction(async (transaction) => {
+                const userSnap: any = await transaction.get(userDocRef);
+                if (userSnap.exists) {
+                  const currentCoins = userSnap.data()?.coins || 0;
+                  finalBalance = currentCoins + reward;
+                  transaction.update(userDocRef, { coins: finalBalance });
+                }
+              });
+              
+              console.log(`💾 [FIRESTORE BALANCE UPDATED] User: ${userId} balance updated in Firestore. Added: ${reward} | New Balance: ${finalBalance}`);
+              
+              if (activeRoomPlayers[userId]) {
+                activeRoomPlayers[userId].balance = finalBalance;
+              }
+              
+              console.log(`📲 [USER BALANCE SENT TO CLIENT] Streamed updated balance to User: ${userId}`);
+            } catch (err: any) {
+              console.error(`❌ [PAYOUT ERROR] Failed to update user ${userId} in database:`, err.message);
+            }
+          }
+        }
+      }
+    }
+  } else if (gameState.phase === 'result') {
+    if (gameState.timer > 0) {
+      gameState.timer--;
+    } else {
+      // Setup next round
+      gameState.history.unshift(gameState.winningFood!);
+      if (gameState.history.length > 20) {
+        gameState.history.pop();
+      }
+      
+      gameState.round++;
+      gameState.phase = 'betting';
+      gameState.timer = 15;
+      gameState.winningFood = null;
+      gameState.totalBets = {};
+      gameState.userBets = {};
+      gameState.allBetsList = [];
+    }
+  }
+  
+  broadcastState();
+}, 1000);
+
+
+// =========================================================================
+// 4. REST API Routing for Game Companion
+// =========================================================================
+
+// SSE stream for game updates
+app.get('/api/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  const userId = req.query.userId as string;
+  const name = (req.query.name as string) || 'Guest';
+  const avatarUrl = (req.query.avatarUrl as string) || '';
+  
+  if (userId) {
+    let balance = 0;
+    const db = getDb();
+    if (db) {
+      try {
+        const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+        if (!usersSnapshot.empty) {
+          balance = usersSnapshot.docs[0].data()?.coins || 0;
+        } else {
+          const docSnap = await db.collection('users').doc(userId).get();
+          if (docSnap.exists) {
+            balance = docSnap.data()?.coins || 0;
+          }
+        }
+      } catch (e) {}
+    }
+    
+    activeRoomPlayers[userId] = {
+      id: userId,
+      name,
+      avatar: avatarUrl,
+      balance,
+      isBot: false
+    };
+  }
+  
+  sseClients.add(res);
+  
+  const payload = JSON.stringify({
+    ...gameState,
+    roomPlayers: getCombinedRoomPlayers()
+  });
+  res.write(`data: ${payload}\n\n`);
+  
+  req.on('close', () => {
+    sseClients.delete(res);
+    if (userId) {
+      delete activeRoomPlayers[userId];
+    }
+  });
+});
+
+// Bet Placement Route
+app.post('/api/bet', async (req, res) => {
+  const { userId, foodId, amount } = req.body;
+  if (!userId || !foodId || !amount || amount <= 0) {
+    res.status(400).json({ error: "Invalid bet parameters" });
+    return;
+  }
+  
+  if (gameState.phase !== 'betting') {
+    res.status(400).json({ error: "المراهنات مغلقة حالياً!" });
+    return;
+  }
+  
+  const db = getDb();
+  if (!db) {
+    res.status(500).json({ error: "قاعدة البيانات غير متصلة" });
+    return;
+  }
+  
+  try {
+    let userDocRef: any;
+    const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+    if (usersSnapshot.empty) {
+      userDocRef = db.collection('users').doc(userId);
+    } else {
+      userDocRef = usersSnapshot.docs[0].ref;
+    }
+    
+    let finalBalance = 0;
+    await db.runTransaction(async (transaction) => {
+      const userSnap: any = await transaction.get(userDocRef);
+      if (!userSnap.exists) {
+        throw new Error("المستخدم غير موجود");
+      }
+      const currentCoins = userSnap.data()?.coins || 0;
+      if (currentCoins < amount) {
+        throw new Error("رصيد غير كافٍ");
+      }
+      finalBalance = currentCoins - amount;
+      transaction.update(userDocRef, { coins: finalBalance });
+    });
+    
+    if (activeRoomPlayers[userId]) {
+      activeRoomPlayers[userId].balance = finalBalance;
+    }
+    
+    gameState.totalBets[foodId] = (gameState.totalBets[foodId] || 0) + amount;
+    if (!gameState.userBets[userId]) {
+      gameState.userBets[userId] = {};
+    }
+    gameState.userBets[userId][foodId] = (gameState.userBets[userId][foodId] || 0) + amount;
+    
+    gameState.allBetsList.unshift({
+      id: Math.random().toString(36).substring(2, 9),
+      userId,
+      username: activeRoomPlayers[userId]?.name || 'Guest',
+      avatar: activeRoomPlayers[userId]?.avatar || '',
+      foodId,
+      amount
+    });
+    
+    broadcastState();
+    res.json({ success: true, balance: finalBalance });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Demo Add Balance Route
+app.post('/api/add-balance', async (req, res) => {
+  const { userId, amount } = req.body;
+  if (!userId || !amount || amount <= 0) {
+    res.status(400).json({ error: "Invalid parameters" });
+    return;
+  }
+  
+  const db = getDb();
+  if (!db) {
+    res.status(500).json({ error: "قاعدة البيانات غير متصلة" });
+    return;
+  }
+  
+  try {
+    let userDocRef: any;
+    const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+    if (usersSnapshot.empty) {
+      userDocRef = db.collection('users').doc(userId);
+    } else {
+      userDocRef = usersSnapshot.docs[0].ref;
+    }
+    
+    let finalBalance = 0;
+    await db.runTransaction(async (transaction) => {
+      const userSnap: any = await transaction.get(userDocRef);
+      if (userSnap.exists) {
+        const currentCoins = userSnap.data()?.coins || 0;
+        finalBalance = currentCoins + amount;
+        transaction.update(userDocRef, { coins: finalBalance });
+      }
+    });
+    
+    if (activeRoomPlayers[userId]) {
+      activeRoomPlayers[userId].balance = finalBalance;
+    }
+    
+    broadcastState();
+    res.json({ success: true, balance: finalBalance });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Admin Companion Routes
+app.get('/api/admin/dashboard', (req, res) => {
+  res.json({
+    platformProfit: 1050,
+    totalUsers: Object.keys(activeRoomPlayers).length + 1,
+    totalRounds: gameState.round
+  });
+});
+
+app.post('/api/admin/inject', (req, res) => {
+  res.json({ success: true });
+});
+
+app.get('/api/logs', (req, res) => {
+  res.json({ logs: [] });
+});
+
+
+// =========================================================================
+// 5. Socket.io Live Messaging Server & Realtime Integrations
+// =========================================================================
+
 let io: SocketIOServer | null = null;
 io = new SocketIOServer(httpServer, {
   cors: {
@@ -169,6 +516,7 @@ io = new SocketIOServer(httpServer, {
 io.on('connection', (socket) => {
   console.log('[SOCKET.IO] Client connected:', socket.id);
 
+  // Client connection request
   socket.on('client:connect', async (data) => {
     console.log('[SOCKET.IO] Received client:connect from', socket.id, 'with data:', data);
     if (!data) data = {};
@@ -182,9 +530,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Fetch user balance and data
     const db = getDb();
-    
     let userResult = {
       userId: displayId,
       name: name || 'Player',
@@ -196,7 +542,6 @@ io.on('connection', (socket) => {
       try {
         let usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
         if (usersSnapshot.empty) {
-          // Attempt fallback search by document ID directly if displayId didn't match
           const docRef = db.collection('users').doc(displayId);
           const docSnap = await docRef.get();
           if (docSnap.exists) {
@@ -220,13 +565,12 @@ io.on('connection', (socket) => {
             balance: docData.coins || 0
           };
         }
-        console.log("[SOCKET.IO] User resolved for game connection:", userResult);
+        console.log("[SOCKET.IO] Resolved user on connect:", userResult);
       } catch (e) {
         console.error("[SOCKET.IO] Error fetching user:", e);
       }
     }
 
-    // Update player mapping
     activeRoomPlayers[displayId] = {
       id: userResult.userId,
       name: userResult.name,
@@ -236,12 +580,64 @@ io.on('connection', (socket) => {
     };
 
     console.log("[SYNC SENT TO CLIENT]", userResult);
-    
-    // Broadcast status and confirm connection
     socket.emit('game:connected', userResult);
     io!.emit('server:status', {
-      roomPlayers: activeRoomPlayers
+      roomPlayers: getCombinedRoomPlayers()
     });
+  });
+
+  // Client manual win socket listener to update Firestore directly (requested by user)
+  socket.on('win', async (data) => {
+    console.log('[SOCKET.IO] Win event triggered! Data:', data);
+    const { displayId, userId, amount } = data || {};
+    const targetId = displayId || userId;
+    const winAmount = Number(amount);
+    
+    if (!targetId || isNaN(winAmount) || winAmount <= 0) {
+      console.error('❌ [WIN EVENT ERROR] Invalid win payload received:', data);
+      return;
+    }
+    
+    console.log(`🏆 [WIN EVENT RECEIVED] Socket win triggered. User: ${targetId} | Amount: ${winAmount}`);
+    
+    const db = getDb();
+    if (db) {
+      try {
+        let userDocRef: any;
+        const usersSnapshot = await db.collection('users').where('displayId', '==', targetId).get();
+        if (usersSnapshot.empty) {
+          userDocRef = db.collection('users').doc(targetId);
+        } else {
+          userDocRef = usersSnapshot.docs[0].ref;
+        }
+        
+        let finalCoins = 0;
+        await db.runTransaction(async (transaction) => {
+          const userSnap: any = await transaction.get(userDocRef);
+          if (!userSnap.exists) {
+            throw new Error("User document does not exist");
+          }
+          const currentCoins = userSnap.data()?.coins || 0;
+          finalCoins = currentCoins + winAmount;
+          transaction.update(userDocRef, { coins: finalCoins });
+        });
+        
+        console.log(`💾 [FIRESTORE BALANCE UPDATED] User: ${targetId} updated via win socket emit. Added: ${winAmount} | New Balance: ${finalCoins}`);
+        
+        // Update in active room players
+        if (activeRoomPlayers[targetId]) {
+          activeRoomPlayers[targetId].balance = finalCoins;
+        }
+        
+        console.log(`📲 [USER BALANCE SENT TO CLIENT] Broadcasting updated balance: ${finalCoins} to User: ${targetId}`);
+        socket.emit('balance:updated', { userId: targetId, balance: finalCoins });
+        io!.emit('server:status', {
+          roomPlayers: getCombinedRoomPlayers()
+        });
+      } catch (err: any) {
+        console.error('❌ [WIN EVENT ERROR] Failed to record socket win transaction:', err.message);
+      }
+    }
   });
 
   socket.on('disconnect', () => {
