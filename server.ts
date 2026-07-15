@@ -179,45 +179,48 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Fetch user balance
+    // Fetch user balance and data
     const db = getDb();
     
-    // TEST: Verify DB connection
-    if (db) {
-      const test = await db.collection("users").where("displayId", "==", "50505").get();
-      console.log("USERS FOUND (TEST):", test.size);
-    }
-    
-    let balance = 0;
+    let userResult = {
+      userId: displayId,
+      name: name || 'Player',
+      avatar: avatarUrl || '',
+      balance: 0
+    };
+
     if (db) {
       try {
-        console.log(`[SOCKET.IO] Fetching balance for displayId: ${displayId}`);
-        // Query users collection where displayId == displayId
         const usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
         if (!usersSnapshot.empty) {
-          balance = usersSnapshot.docs[0].data().coins || 0;
-          console.log(`[SOCKET.IO] Found balance: ${balance} for displayId: ${displayId}`);
-        } else {
-          console.log(`[SOCKET.IO] No user found for displayId: ${displayId}`);
+          const doc = usersSnapshot.docs[0];
+          const docData = doc.data();
+          userResult = {
+            userId: doc.id,
+            name: docData.name || name || 'Player',
+            avatar: docData.avatar || avatarUrl || '',
+            balance: docData.coins || 0
+          };
+          console.log("[USER FOUND]", userResult);
         }
       } catch (e) {
-        console.error("[SOCKET.IO] Error fetching balance:", e);
+        console.error("[SOCKET.IO] Error fetching user:", e);
       }
     }
 
     // Update player mapping
     activeRoomPlayers[displayId] = {
-      id: displayId,
-      name: name || 'Player',
-      avatar: avatarUrl || '',
-      balance: balance,
+      id: userResult.userId,
+      name: userResult.name,
+      avatar: userResult.avatar,
+      balance: userResult.balance,
       isBot: false
     };
 
-    console.log(`[SOCKET.IO] Broadcasting game:connected to socket`, socket.id);
+    console.log("[SYNC SENT TO CLIENT]", userResult);
     
     // Broadcast status and confirm connection
-    socket.emit('game:connected', { balance });
+    socket.emit('game:connected', userResult);
     io!.emit('server:status', {
       roomPlayers: activeRoomPlayers
     });
