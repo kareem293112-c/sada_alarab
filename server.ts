@@ -168,11 +168,12 @@ io.on('connection', (socket) => {
   console.log('[SOCKET.IO] Client connected:', socket.id);
 
   socket.on('client:connect', async (data) => {
-    console.log('[SOCKET.IO] Received client:connect', data);
+    console.log('[SOCKET.IO] Received client:connect from', socket.id, 'with data:', data);
     const { displayId, name, avatarUrl } = data;
 
     if (!displayId) {
-      console.error("Missing displayId in client:connect");
+      console.error("[SOCKET.IO] Missing displayId in client:connect from socket", socket.id);
+      socket.emit('error', { message: 'Missing displayId' });
       return;
     }
 
@@ -181,13 +182,17 @@ io.on('connection', (socket) => {
     let balance = 0;
     if (db) {
       try {
+        console.log(`[SOCKET.IO] Fetching balance for displayId: ${displayId}`);
         // Query users collection where displayId == displayId
         const usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
         if (!usersSnapshot.empty) {
           balance = usersSnapshot.docs[0].data().coins || 0;
+          console.log(`[SOCKET.IO] Found balance: ${balance} for displayId: ${displayId}`);
+        } else {
+          console.log(`[SOCKET.IO] No user found for displayId: ${displayId}`);
         }
       } catch (e) {
-        console.error("Error fetching balance:", e);
+        console.error("[SOCKET.IO] Error fetching balance:", e);
       }
     }
 
@@ -200,7 +205,10 @@ io.on('connection', (socket) => {
       isBot: false
     };
 
-    // Broadcast status
+    console.log(`[SOCKET.IO] Broadcasting game:connected to socket`, socket.id);
+    
+    // Broadcast status and confirm connection
+    socket.emit('game:connected', { balance });
     io!.emit('server:status', {
       roomPlayers: activeRoomPlayers
     });
