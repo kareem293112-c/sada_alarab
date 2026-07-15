@@ -66,8 +66,7 @@ function getDb(): Firestore | null {
         } else {
           app = apps[0];
         }
-        const firestoreInstance = getFirestore(app);
-        firestoreInstance.settings({ databaseId });
+        const firestoreInstance = getFirestore(app, databaseId);
         dbInstance = firestoreInstance;
         console.log("🔥 [FIREBASE] Initialized with Service Account File");
         return dbInstance;
@@ -92,8 +91,7 @@ function getDb(): Firestore | null {
       } else {
         app = apps[0];
       }
-      const firestoreInstance = getFirestore(app);
-      firestoreInstance.settings({ databaseId });
+      const firestoreInstance = getFirestore(app, databaseId);
       dbInstance = firestoreInstance;
       console.log("🔥 [FIREBASE] Initialized via Environment Variable");
       return dbInstance;
@@ -113,8 +111,7 @@ function getDb(): Firestore | null {
     } else {
       app = apps[0];
     }
-    const firestoreInstance = getFirestore(app);
-    firestoreInstance.settings({ databaseId });
+    const firestoreInstance = getFirestore(app, databaseId);
     dbInstance = firestoreInstance;
     console.log("⚠️ [FIREBASE] Initialized with fallback configuration (No service account)");
     return dbInstance;
@@ -126,7 +123,12 @@ function getDb(): Firestore | null {
 
 // Ensure database loads once on startup gracefully
 try {
-  getDb();
+  const db = getDb();
+  if (db) {
+    db.collection("users").where("displayId", "==", "50505").get()
+      .then(snapshot => console.log("🔥 [STARTUP TEST] USERS FOUND:", snapshot.size))
+      .catch(err => console.error("❌ [STARTUP TEST] Error:", err));
+  }
 } catch (e) {}
 
 // Health Check API
