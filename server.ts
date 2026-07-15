@@ -171,11 +171,14 @@ io.on('connection', (socket) => {
 
   socket.on('client:connect', async (data) => {
     console.log('[SOCKET.IO] Received client:connect from', socket.id, 'with data:', data);
-    const { displayId, name, avatarUrl } = data;
+    if (!data) data = {};
+    const displayId = data.displayId || data.userId || data.id;
+    const name = data.name || data.username || 'Player';
+    const avatarUrl = data.avatarUrl || data.avatar || '';
 
     if (!displayId) {
-      console.error("[SOCKET.IO] Missing displayId in client:connect from socket", socket.id);
-      socket.emit('error', { message: 'Missing displayId' });
+      console.error("[SOCKET.IO] Missing displayId or userId in client:connect from socket", socket.id);
+      socket.emit('error', { message: 'Missing displayId or userId' });
       return;
     }
 
@@ -191,8 +194,23 @@ io.on('connection', (socket) => {
 
     if (db) {
       try {
-        const usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
-        if (!usersSnapshot.empty) {
+        let usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
+        if (usersSnapshot.empty) {
+          // Attempt fallback search by document ID directly if displayId didn't match
+          const docRef = db.collection('users').doc(displayId);
+          const docSnap = await docRef.get();
+          if (docSnap.exists) {
+            const docData = docSnap.data();
+            if (docData) {
+              userResult = {
+                userId: docSnap.id,
+                name: docData.name || name || 'Player',
+                avatar: docData.avatar || avatarUrl || '',
+                balance: docData.coins || 0
+              };
+            }
+          }
+        } else {
           const doc = usersSnapshot.docs[0];
           const docData = doc.data();
           userResult = {
@@ -201,8 +219,8 @@ io.on('connection', (socket) => {
             avatar: docData.avatar || avatarUrl || '',
             balance: docData.coins || 0
           };
-          console.log("[USER FOUND]", userResult);
         }
+        console.log("[SOCKET.IO] User resolved for game connection:", userResult);
       } catch (e) {
         console.error("[SOCKET.IO] Error fetching user:", e);
       }
