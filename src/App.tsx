@@ -4983,7 +4983,7 @@ export default function App() {
                       <div className="flex-grow w-full bg-transparent relative">
                         {currentUser && currentUser.displayId ? (
                           (() => {
-                            const gameUrl = `https://sdfghjkl-zgkx.onrender.com?displayId=${currentUser.displayId}&name=${encodeURIComponent(currentUser.name || "")}&avatarUrl=${encodeURIComponent(currentUser.avatarUrl || "")}`;
+                            const gameUrl = `https://sdfghjkl-zgkx.onrender.com?displayId=${currentUser.displayId}&name=${encodeURIComponent(currentUser.name || "")}&avatarUrl=${encodeURIComponent(currentUser.avatar || "")}&coins=${currentUser.coins}&balance=${currentUser.coins}`;
                             return (
                               <iframe
                                 src={gameUrl}
