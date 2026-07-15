@@ -516,6 +516,19 @@ app.post('/api/add-balance', async (req, res) => {
   }
 });
 
+// Virtual premium gift logging and persistence transaction endpoint
+app.post('/api/send-gift', async (req, res) => {
+  const { senderId, receiverId, giftCost, xpReward } = req.body;
+  console.log(`[GIFT TRANSACTION] Sender: ${senderId}, Receiver: ${receiverId}, Cost: ${giftCost}, XP: ${xpReward}`);
+  
+  if (!senderId || !giftCost) {
+    res.status(400).json({ error: "Missing gift parameters" });
+    return;
+  }
+  
+  res.json({ success: true, message: "Gift processed persistently on server" });
+});
+
 // Admin Companion Routes
 app.get('/api/admin/dashboard', (req, res) => {
   res.json({

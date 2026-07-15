@@ -1548,21 +1548,30 @@ export default function App() {
   const [isGiftDrawerOpen, setIsGiftDrawerOpen] = useState(false);
   const [isGameSheetOpen, setIsGameSheetOpen] = useState(false);
   const [activeGameUrl, setActiveGameUrl] = useState<string | null>(null);
+  const loadedUserIdentityRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isGameSheetOpen) {
-      if (!activeGameUrl) {
-        const user = currentUser || lastValidUserRef.current;
-        if (user && user.displayId) {
+      const user = currentUser || lastValidUserRef.current;
+      if (user && user.displayId) {
+        const userIdentityKey = `${user.id || user.displayId}_${user.name}_${user.avatar || ''}`;
+        
+        // If there's no URL yet OR the user identity changed, regenerate completely!
+        if (!activeGameUrl || loadedUserIdentityRef.current !== userIdentityKey) {
+          loadedUserIdentityRef.current = userIdentityKey;
           const gameHost = (typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('run.app')))
             ? ''
             : 'https://oih-w0t5.onrender.com';
           const url = `${gameHost}/game.html?displayId=${user.displayId}&userId=${user.displayId}&name=${encodeURIComponent(user.name || "")}&avatarUrl=${encodeURIComponent(user.avatar || "")}&avatar=${encodeURIComponent(user.avatar || "")}&coins=${user.coins}&balance=${user.coins}`;
           setActiveGameUrl(url);
         }
+      } else {
+        setActiveGameUrl(null);
+        loadedUserIdentityRef.current = null;
       }
     } else {
       setActiveGameUrl(null);
+      loadedUserIdentityRef.current = null;
     }
   }, [isGameSheetOpen, currentUser, activeGameUrl]);
 
@@ -7186,7 +7195,7 @@ export default function App() {
             {/* Game WebView Simulator Container */}
             <div className="flex-grow w-full bg-transparent relative">
               {activeGameUrl ? (
-                <GameContainer activeGameUrl={activeGameUrl} />
+                <GameContainer key={activeGameUrl} activeGameUrl={activeGameUrl} />
               ) : (
                 <div className="flex items-center justify-center h-full w-full text-gray-400 font-sans">
                   جاري جلب بيانات الحساب والاتصال باللعبة...

@@ -11,6 +11,7 @@ export class AgoraEngineManager {
     // 1. إضافة متغير لمتابعة حالة الانضمام الفعلية
     private isJoined = false;
     private audioCtx?: AudioContext;
+    private hasAlertedPermissionDenied = false;
 
     private constructor() {}
     
@@ -137,9 +138,19 @@ export class AgoraEngineManager {
             } else {
                 console.log("[AGORA] Track is already published, skipping.");
             }
-        } catch (e) {
+            this.hasAlertedPermissionDenied = false; // Reset warning state on success
+        } catch (e: any) {
             this.isPublishing = false;
             console.warn("[AGORA] Mic publishing failed or permission denied (Simulation fallback active):", e);
+            const errStr = String(e?.message || e || "");
+            if (errStr.includes("PERMISSION_DENIED") || errStr.includes("Permission denied") || (e?.name === "NotAllowedError")) {
+                if (!this.hasAlertedPermissionDenied) {
+                    this.hasAlertedPermissionDenied = true;
+                    if (typeof window !== "undefined") {
+                        alert("⚠️ تم رفض الوصول للميكروفون!\nيرجى السماح بصلاحية الميكروفون من إعدادات المتصفح أو أيقونة القفل بجانب شريط العنوان لتتمكن من التحدث داخل المجلس الصوتي.");
+                    }
+                }
+            }
         }
     }
 
