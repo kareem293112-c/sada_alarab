@@ -1509,6 +1509,18 @@ export default function App() {
   // Native Mobile UI States (Bottom sheet draw lists)
   const [isGiftDrawerOpen, setIsGiftDrawerOpen] = useState(false);
   const [isGameSheetOpen, setIsGameSheetOpen] = useState(false);
+  const [activeGameUrl, setActiveGameUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isGameSheetOpen) {
+      if (currentUser && currentUser.displayId && !activeGameUrl) {
+        const url = `https://oih-w0t5.onrender.com?displayId=${currentUser.displayId}&userId=${currentUser.displayId}&name=${encodeURIComponent(currentUser.name || "")}&avatarUrl=${encodeURIComponent(currentUser.avatar || "")}&avatar=${encodeURIComponent(currentUser.avatar || "")}&coins=${currentUser.coins}&balance=${currentUser.coins}`;
+        setActiveGameUrl(url);
+      }
+    } else {
+      setActiveGameUrl(null);
+    }
+  }, [isGameSheetOpen, currentUser?.displayId, activeGameUrl]);
 
   const [isQueueDrawerOpen, setIsQueueDrawerOpen] = useState(false);
   const [isNoiseCancellation, setIsNoiseCancellation] = useState(true);
@@ -4981,19 +4993,14 @@ export default function App() {
 
                       {/* Game WebView Simulator Container */}
                       <div className="flex-grow w-full bg-transparent relative">
-                        {currentUser && currentUser.displayId ? (
-                          (() => {
-                            const gameUrl = `https://oih-w0t5.onrender.com?displayId=${currentUser.displayId}&userId=${currentUser.displayId}&name=${encodeURIComponent(currentUser.name || "")}&avatarUrl=${encodeURIComponent(currentUser.avatar || "")}&avatar=${encodeURIComponent(currentUser.avatar || "")}&coins=${currentUser.coins}&balance=${currentUser.coins}`;
-                            return (
-                              <iframe
-                                src={gameUrl}
-                                className="w-full h-full border-0 bg-transparent"
-                                title="Food Fortune Wheel Game"
-                                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                              />
-                            );
-                          })()
+                        {activeGameUrl ? (
+                          <iframe
+                            src={activeGameUrl}
+                            className="w-full h-full border-0 bg-transparent"
+                            title="Food Fortune Wheel Game"
+                            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                          />
                         ) : (
                           <div className="flex items-center justify-center h-full w-full text-gray-400">
                             جاري جلب بيانات الحساب والاتصال باللعبة...
