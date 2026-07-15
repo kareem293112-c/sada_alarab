@@ -259,7 +259,14 @@ setInterval(async () => {
           if (db) {
             try {
               let userDocRef: any;
-              const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+              let usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+              if (usersSnapshot.empty) {
+                const numId = Number(userId);
+                if (!isNaN(numId)) {
+                  usersSnapshot = await db.collection('users').where('displayId', '==', numId).get();
+                }
+              }
+              
               if (usersSnapshot.empty) {
                 userDocRef = db.collection('users').doc(userId);
               } else {
@@ -333,16 +340,29 @@ app.get('/api/stream', async (req, res) => {
     const db = getDb();
     if (db) {
       try {
-        const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+        let usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+        if (usersSnapshot.empty) {
+          const numId = Number(userId);
+          if (!isNaN(numId)) {
+            usersSnapshot = await db.collection('users').where('displayId', '==', numId).get();
+          }
+        }
+        
         if (!usersSnapshot.empty) {
           balance = usersSnapshot.docs[0].data()?.coins || 0;
+          console.log(`📡 [USER CONNECTED] Fetched balance from Firestore via displayId (${userId}): ${balance} coins`);
         } else {
           const docSnap = await db.collection('users').doc(userId).get();
           if (docSnap.exists) {
             balance = docSnap.data()?.coins || 0;
+            console.log(`📡 [USER CONNECTED] Fetched balance from Firestore via docId (${userId}): ${balance} coins`);
+          } else {
+            console.warn(`⚠️ [USER CONNECTED] User not found in Firestore for id: ${userId}, defaulting to 0`);
           }
         }
-      } catch (e) {}
+      } catch (e: any) {
+        console.error(`❌ [USER CONNECTED ERROR] Failed to fetch balance for user ${userId}:`, e.message);
+      }
     }
     
     activeRoomPlayers[userId] = {
@@ -391,7 +411,14 @@ app.post('/api/bet', async (req, res) => {
   
   try {
     let userDocRef: any;
-    const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+    let usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+    if (usersSnapshot.empty) {
+      const numId = Number(userId);
+      if (!isNaN(numId)) {
+        usersSnapshot = await db.collection('users').where('displayId', '==', numId).get();
+      }
+    }
+    
     if (usersSnapshot.empty) {
       userDocRef = db.collection('users').doc(userId);
     } else {
@@ -454,7 +481,14 @@ app.post('/api/add-balance', async (req, res) => {
   
   try {
     let userDocRef: any;
-    const usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+    let usersSnapshot = await db.collection('users').where('displayId', '==', userId).get();
+    if (usersSnapshot.empty) {
+      const numId = Number(userId);
+      if (!isNaN(numId)) {
+        usersSnapshot = await db.collection('users').where('displayId', '==', numId).get();
+      }
+    }
+    
     if (usersSnapshot.empty) {
       userDocRef = db.collection('users').doc(userId);
     } else {
@@ -542,6 +576,13 @@ io.on('connection', (socket) => {
       try {
         let usersSnapshot = await db.collection('users').where('displayId', '==', displayId).get();
         if (usersSnapshot.empty) {
+          const numId = Number(displayId);
+          if (!isNaN(numId)) {
+            usersSnapshot = await db.collection('users').where('displayId', '==', numId).get();
+          }
+        }
+        
+        if (usersSnapshot.empty) {
           const docRef = db.collection('users').doc(displayId);
           const docSnap = await docRef.get();
           if (docSnap.exists) {
@@ -604,7 +645,14 @@ io.on('connection', (socket) => {
     if (db) {
       try {
         let userDocRef: any;
-        const usersSnapshot = await db.collection('users').where('displayId', '==', targetId).get();
+        let usersSnapshot = await db.collection('users').where('displayId', '==', targetId).get();
+        if (usersSnapshot.empty) {
+          const numId = Number(targetId);
+          if (!isNaN(numId)) {
+            usersSnapshot = await db.collection('users').where('displayId', '==', numId).get();
+          }
+        }
+        
         if (usersSnapshot.empty) {
           userDocRef = db.collection('users').doc(targetId);
         } else {
