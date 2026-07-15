@@ -4996,13 +4996,18 @@ export default function App() {
                       {/* Game WebView Simulator Container */}
                       <div className="flex-grow w-full bg-transparent relative">
                         {currentUser && currentUser.displayId ? (
-                          <iframe
-                            src={`https://sdfghjkl-zgkx.onrender.com/?displayId=${encodeURIComponent(currentUser.displayId)}&name=${encodeURIComponent(currentUser.name || "User")}&avatarUrl=${encodeURIComponent(currentUser.avatar || "")}`}
-                            className="w-full h-full border-0 bg-transparent"
-                            title="Food Fortune Wheel Game"
-                            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                          />
+                          (() => {
+                            const gameUrl = `https://sdfghjkl-zgkx.onrender.com?displayId=${currentUser.displayId}&name=${encodeURIComponent(currentUser.name || "")}&avatarUrl=${encodeURIComponent(currentUser.avatarUrl || "")}`;
+                            return (
+                              <iframe
+                                src={gameUrl}
+                                className="w-full h-full border-0 bg-transparent"
+                                title="Food Fortune Wheel Game"
+                                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                              />
+                            );
+                          })()
                         ) : (
                           <div className="flex items-center justify-center h-full w-full text-gray-400">
                             جاري جلب بيانات الحساب والاتصال باللعبة...
