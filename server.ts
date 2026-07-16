@@ -467,6 +467,23 @@ app.post('/api/bet', async (req, res) => {
 });
 
 // Demo Add Balance Route
+app.post('/api/sync-balance', (req, res) => {
+  const { userId, balance } = req.body;
+  if (!userId || balance === undefined) {
+    res.status(400).json({ error: "Invalid parameters" });
+    return;
+  }
+  let existingPlayer = gameState.roomPlayers.find(p => p.id === userId);
+  if (existingPlayer) {
+    existingPlayer.balance = balance;
+  }
+  if (activeRoomPlayers[userId]) {
+    activeRoomPlayers[userId].balance = balance;
+  }
+  broadcastState();
+  res.json({ success: true, balance });
+});
+
 app.post('/api/add-balance', async (req, res) => {
   const { userId, amount } = req.body;
   if (!userId || !amount || amount <= 0) {

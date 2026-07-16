@@ -1564,6 +1564,24 @@ export default function App() {
             : 'https://chghr.onrender.com';
           const url = `${gameHost}/game.html?displayId=${user.displayId}&userId=${user.displayId}&name=${encodeURIComponent(user.name || "")}&avatarUrl=${encodeURIComponent(user.avatar || "")}&avatar=${encodeURIComponent(user.avatar || "")}&coins=${user.coins}&balance=${user.coins}`;
           setActiveGameUrl(url);
+        } else if (activeGameUrl) {
+          // If the URL is already active, just send a postMessage to sync balance dynamically
+          const iframe = document.querySelector('iframe[title="Game View"]') as HTMLIFrameElement;
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+              type: 'SYNC_BALANCE',
+              payload: { balance: user.coins }
+            }, '*');
+          }
+          // Also sync with the game backend server
+          const gameHost = (typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('run.app')))
+            ? ''
+            : 'https://chghr.onrender.com';
+          fetch(`${gameHost}/api/sync-balance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.displayId, balance: user.coins })
+          }).catch(e => console.error("Failed to sync balance:", e));
         }
       } else {
         setActiveGameUrl(null);
