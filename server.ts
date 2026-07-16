@@ -16,6 +16,7 @@ const httpServer = createHttpServer(app);
 
 // 1. Configure robust CORS to prevent any blocking issues
 const allowedOrigins = [
+  'https://chghr.onrender.com',
   'https://wif.onrender.com',
   'https://sada-alarab.onrender.com',
   'https://onrender.com',

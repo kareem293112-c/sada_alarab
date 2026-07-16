@@ -1561,7 +1561,7 @@ export default function App() {
           loadedUserIdentityRef.current = userIdentityKey;
           const gameHost = (typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('run.app')))
             ? ''
-            : 'https://oih-w0t5.onrender.com';
+            : 'https://chghr.onrender.com';
           const url = `${gameHost}/game.html?displayId=${user.displayId}&userId=${user.displayId}&name=${encodeURIComponent(user.name || "")}&avatarUrl=${encodeURIComponent(user.avatar || "")}&avatar=${encodeURIComponent(user.avatar || "")}&coins=${user.coins}&balance=${user.coins}`;
           setActiveGameUrl(url);
         }
