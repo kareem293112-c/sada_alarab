@@ -103,7 +103,7 @@ export default function WalletView({ onBack, currentUser, users = [] }: WalletVi
         });
         
         // Record withdrawal request in "withdrawal_requests" collection
-        const agencyOwner = users.find(u => u.id === userData.agencyId);
+        const agencyOwner = users?.find(u => u.id === userData.agencyId);
         const agencyDisplayId = agencyOwner?.displayId || null;
 
         await addDoc(collection(db, "withdrawal_requests"), {

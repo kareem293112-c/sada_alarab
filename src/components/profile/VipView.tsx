@@ -550,7 +550,7 @@ export default function VipView({ onBack, currentUser }: Props) {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-amber-500/5 blur-[80px] rounded-full pointer-events-none"></div>
 
         {/* Top angled actions bar - perfectly aligned with the screen margins */}
-        <div className="w-full px-1 flex items-center justify-between relative z-10 mt-6 mb-2">
+        <div className="w-full px-1 flex items-center justify-between relative z-10 mt-10 mb-2">
           {/* Right Action: Rules (قواعد) */}
           <button 
             onClick={() => setIsVipRulesModalOpen(true)}

@@ -47,7 +47,7 @@ export default function CoinAgentPortalView({ onBack, currentUser, users }: Prop
       return;
     }
 
-    const targetUser = users.find(u => u.displayId === targetId || u.originalDisplayId === targetId);
+    const targetUser = users?.find(u => u.displayId === targetId || u.originalDisplayId === targetId);
     if (!targetUser) {
       setErrorMsg('لم يتم العثور على مستخدم بهذا الآيدي.');
       return;

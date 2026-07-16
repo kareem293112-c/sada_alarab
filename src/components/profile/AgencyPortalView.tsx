@@ -129,7 +129,7 @@ export default function AgencyPortalView({ onBack, currentUser, users }: Props) 
     }
 
     // Look up by displayId or originalDisplayId or raw Firestore ID
-    const target = users.find(
+    const target = users?.find(
       u => u.displayId === searchId.trim() || 
            u.originalDisplayId === searchId.trim() || 
            u.id === searchId.trim()

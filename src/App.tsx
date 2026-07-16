@@ -144,13 +144,13 @@ const EncryptedMessageText = ({
 
 const padSeats = (seats: VoiceSeat[] | undefined | null): VoiceSeat[] => {
   const s = seats || [];
-  const hasIndexTen = s.some(item => item.index === 10);
-  const hasIndexZero = s.some(item => item.index === 0);
+  const hasIndexTen = s?.some(item => item.index === 10);
+  const hasIndexZero = s?.some(item => item.index === 0);
   const isOneBased = hasIndexTen || !hasIndexZero;
 
   return Array.from({ length: 10 }, (_, idx) => {
     const targetIndex = isOneBased ? idx + 1 : idx;
-    const matched = s.find(item => item.index === targetIndex);
+    const matched = s?.find(item => item.index === targetIndex);
     if (matched) {
       return {
         ...matched,
@@ -209,7 +209,7 @@ const getNextDisplayId = async (): Promise<string> => {
     let unique = false;
     while (!unique) {
       const idStr = nextId.toString();
-      const duplicateExists = querySnapshot.docs.some(docSnap => docSnap.data().displayId === idStr);
+      const duplicateExists = querySnapshot.docs?.some(docSnap => docSnap.data().displayId === idStr);
       if (!duplicateExists) {
         unique = true;
       } else {
@@ -557,7 +557,7 @@ export default function App() {
   // Profile, Direct Messaging & Follower States
   const [selectedProfileUser, setSelectedProfileUser] = useState<AppUser | null>(null);
   const activeProfileUser = selectedProfileUser 
-    ? (users.find(u => u.id === selectedProfileUser.id) || selectedProfileUser) 
+    ? (users?.find(u => u.id === selectedProfileUser.id) || selectedProfileUser) 
     : null;
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPrivateInboxOpen, setIsPrivateInboxOpen] = useState(false);
@@ -858,7 +858,7 @@ export default function App() {
           };
           setRoomMessages(prev => {
             // Avoid duplicates
-            if (prev.find(m => m.id === msg.id)) return prev;
+            if (prev?.find(m => m.id === msg.id)) return prev;
             return [...prev, msg].slice(-100); // Keep max 100 in local state
           });
         }
@@ -881,7 +881,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeRoom && rooms.length > 0) {
-      const updated = rooms.find(r => r.id === activeRoom.id);
+      const updated = rooms?.find(r => r.id === activeRoom.id);
       if (updated && JSON.stringify(updated.seats) !== JSON.stringify(activeRoom.seats)) {
         console.log("[SYNC] Syncing activeRoom seats from real-time rooms list");
         setActiveRoom(updated);
@@ -1440,7 +1440,7 @@ export default function App() {
         const soundLevel = v.level;
         const currentActiveRoom = activeRoomRef.current;
         if (currentActiveRoom && currentActiveRoom.seats) {
-          const seatIdx = currentActiveRoom.seats.findIndex(s => s.userId === streamUserId);
+          const seatIdx = currentActiveRoom?.seats?.findIndex(s => s.userId === streamUserId);
           if (seatIdx !== -1) {
             if (soundLevel > 5) {
               setSpeakingSeatIndex(seatIdx);
@@ -1995,8 +1995,8 @@ export default function App() {
     // Resume/init Agora inside user gesture
     AgoraEngineManager.getInstance().initEngine().catch(() => {});
 
-    const seat = activeRoom.seats[seatIndex];
-    const isAuthorizedHost = checkIfOwner(activeRoom) || (activeRoom.seats[0] && activeRoom.seats[0].userId === currentUser.id);
+    const seat = activeRoom?.seats?.[seatIndex];
+    const isAuthorizedHost = checkIfOwner(activeRoom) || (activeRoom?.seats?.[0] && activeRoom?.seats?.[0].userId === currentUser.id);
 
     // If seat is occupied, let host manage it, or let occupant manage their own seat
     if (seat.userId) {
@@ -2004,7 +2004,7 @@ export default function App() {
         setSelectedSeatIndex(seatIndex);
       } else {
         // Show occupant's profile modal instead of showing host controls
-        const occupant = users.find(u => u.id === seat.userId) || (currentUser && seat.userId === currentUser.id ? currentUser : null);
+        const occupant = users?.find(u => u.id === seat.userId) || (currentUser && seat.userId === currentUser.id ? currentUser : null);
         if (occupant) {
           setSelectedProfileUser(occupant);
           setIsProfileModalOpen(true);
@@ -2022,7 +2022,7 @@ export default function App() {
       } else {
         // Sit down!
         // First, stand up from any other guest seat they might be on
-        const updatedSeats = activeRoom.seats.map((s, idx) => {
+        const updatedSeats = activeRoom?.seats?.map((s, idx) => {
           if (s.userId === currentUser.id) {
             return { ...s, userId: null }; // Stand up
           }
@@ -2034,7 +2034,7 @@ export default function App() {
 
         const updatedRoom = { ...activeRoom, seats: updatedSeats };
         setActiveRoom(updatedRoom);
-        setRooms(rooms.map(r => r.id === activeRoom.id ? updatedRoom : r));
+        setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
         
         // Persist seat change to Firestore
         updateDoc(doc(db, "voice_rooms", activeRoom.id), { seats: updatedSeats }).catch(err => {
@@ -2048,8 +2048,8 @@ export default function App() {
   const handleHostAction = async (action: 'mute' | 'lock' | 'kick' | 'leave') => {
     if (!activeRoom || selectedSeatIndex === null || !currentUser) return;
 
-    const seat = activeRoom.seats[selectedSeatIndex];
-    const isAuthorizedHost = checkIfOwner(activeRoom) || (activeRoom.seats[0] && activeRoom.seats[0].userId === currentUser.id);
+    const seat = activeRoom?.seats?.[selectedSeatIndex];
+    const isAuthorizedHost = checkIfOwner(activeRoom) || (activeRoom?.seats?.[0] && activeRoom?.seats?.[0].userId === currentUser.id);
 
     // Safeguard: only owner/host can mute, lock, or kick others
     if ((action === 'mute' || action === 'lock' || action === 'kick') && !isAuthorizedHost) {
@@ -2080,7 +2080,7 @@ export default function App() {
 
     const updatedRoom = { ...activeRoom, seats: updatedSeats };
     setActiveRoom(updatedRoom);
-    setRooms(rooms.map(r => r.id === activeRoom.id ? updatedRoom : r));
+    setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
     setSelectedSeatIndex(null);
 
     // Real-time synchronization broadcast
@@ -2100,7 +2100,7 @@ export default function App() {
     let receiverSeatIndex: number | null = null;
 
     if (selectedRecipientSeatIndex !== 'all') {
-      const seat = activeRoom.seats.find(s => s.index === selectedRecipientSeatIndex);
+      const seat = activeRoom?.seats?.find(s => s.index === selectedRecipientSeatIndex);
       if (seat && seat.userId) {
         receiverId = seat.userId;
         receiverSeatIndex = seat.index;
@@ -2158,7 +2158,7 @@ export default function App() {
           senderXp: selfNewSenderXp
         };
         recName = currentUser.name;
-        updatedUsersList = users.map(u => u.id === currentUser.id ? updatedUser : u);
+        updatedUsersList = users?.map(u => u.id === currentUser.id ? updatedUser : u);
 
         // Persist to Firestore directly (Self support)
         const userRef = doc(db, "users", currentUser.id);
@@ -2173,7 +2173,7 @@ export default function App() {
 
       } else {
         // Supporting someone else
-        const recUser = users.find(u => u.id === receiverId);
+        const recUser = users?.find(u => u.id === receiverId);
         if (recUser) {
           recName = recUser.name;
           const receiverNewCharmXp = (recUser.charmXp || 0) + gift.cost;
@@ -2184,7 +2184,7 @@ export default function App() {
             xp: recUser.xp,
             level: recUser.level
           };
-          updatedUsersList = users.map(u => {
+          updatedUsersList = users?.map(u => {
             if (u.id === currentUser.id) return updatedUser;
             if (u.id === receiverId) return updatedRec;
             return u;
@@ -2209,7 +2209,7 @@ export default function App() {
           }).catch(err => console.error("Error updating receiver in Firestore:", err));
 
         } else {
-          updatedUsersList = users.map(u => u.id === currentUser.id ? updatedUser : u);
+          updatedUsersList = users?.map(u => u.id === currentUser.id ? updatedUser : u);
 
           // Persist to Firestore directly (Sender only)
           const senderRef = doc(db, "users", currentUser.id);
@@ -2222,7 +2222,7 @@ export default function App() {
         }
       }
     } else {
-      updatedUsersList = users.map(u => u.id === currentUser.id ? updatedUser : u);
+      updatedUsersList = users?.map(u => u.id === currentUser.id ? updatedUser : u);
 
       // Persist to Firestore directly (Sender only)
       const senderRef = doc(db, "users", currentUser.id);
@@ -2334,7 +2334,7 @@ export default function App() {
   // Agent Dashboard logic: User Search
   useEffect(() => {
     if (transferTargetId) {
-      const found = users.find(u => u.displayId === transferTargetId || u.id === transferTargetId);
+      const found = users?.find(u => u.displayId === transferTargetId || u.id === transferTargetId);
       setTransferTargetUser(found || null);
     } else {
       setTransferTargetUser(null);
@@ -3011,7 +3011,7 @@ export default function App() {
                               ))}
                             </div>
                           ) : (
-                            rooms.map((room) => (
+                            rooms?.map((room) => (
                               <div
                                 key={room.id}
                                 onClick={() => handleEnterRoom(room)}
@@ -3059,7 +3059,7 @@ export default function App() {
                         {/* Floating Golden Microphone Create Room button */}
                         <div className="fixed bottom-20 left-4 z-40">
                           {(() => {
-                            const myRoom = rooms.find(r => 
+                            const myRoom = rooms?.find(r => 
                               (r.owner_id && currentUser?.id && r.owner_id === currentUser.id)
                             );
                             if (myRoom) {
@@ -3625,7 +3625,7 @@ export default function App() {
 
                             return Array.from(threadsMap.values()).map(latestMsg => {
                               const otherUserId = latestMsg.senderId === currentUser?.id ? latestMsg.receiverId : latestMsg.senderId;
-                              const otherUser = users.find(u => u.id === otherUserId) || {
+                              const otherUser = users?.find(u => u.id === otherUserId) || {
                                 id: otherUserId,
                                 name: latestMsg.senderId === currentUser?.id ? latestMsg.receiverName : latestMsg.senderName,
                                 avatar: latestMsg.senderId === currentUser?.id ? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde' : latestMsg.senderAvatar,
@@ -3700,7 +3700,7 @@ export default function App() {
                           setIsEditingBio={setIsEditingBio}
                           setBioEditValue={setBioEditValue}
                           onEnterMyRoom={() => {
-                            const myRoom = rooms.find(r => r.owner_id && currentUser?.id && r.owner_id === currentUser.id);
+                            const myRoom = rooms?.find(r => r.owner_id && currentUser?.id && r.owner_id === currentUser.id);
                             if (myRoom) {
                               handleEnterRoom(myRoom);
                             } else {
@@ -4365,14 +4365,14 @@ export default function App() {
                       {/* Close X Button */}
                       <button
                         onClick={async () => {
-                          const isOnSeat = activeRoom.seats.some(s => s.userId === currentUser.id);
+                          const isOnSeat = activeRoom?.seats?.some(s => s.userId === currentUser.id);
                           if (isOnSeat) {
                             const agoraManager = AgoraEngineManager.getInstance();
                             agoraManager.stopPublishing();
                           }
-                          const cleanedSeats = activeRoom.seats.map(s => s.userId === currentUser.id ? { ...s, userId: null } : s);
+                          const cleanedSeats = activeRoom?.seats?.map(s => s.userId === currentUser.id ? { ...s, userId: null } : s);
                           const updatedRoom = { ...activeRoom, seats: cleanedSeats };
-                          setRooms(rooms.map(r => r.id === activeRoom.id ? updatedRoom : r));
+                          setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
                           
                           // Sync with Firestore before leaving
                           await updateDoc(doc(db, "voice_rooms", activeRoom.id), { seats: cleanedSeats });
@@ -4412,8 +4412,8 @@ export default function App() {
                     <div className="mt-1 mb-auto py-2">
                       <div className="grid grid-cols-5 gap-y-8 gap-x-1.5 text-center">
                         {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((index) => {
-                          const seat = activeRoom.seats[index] || { index, userId: null, isMuted: false, isLocked: false };
-                          const occupant = seat.userId ? (users.find(u => u.id === seat.userId) || (currentUser && seat.userId === currentUser.id ? currentUser : null)) : null;
+                          const seat = activeRoom?.seats?.[index] || { index, userId: null, isMuted: false, isLocked: false };
+                          const occupant = seat.userId ? (users?.find(u => u.id === seat.userId) || (currentUser && seat.userId === currentUser.id ? currentUser : null)) : null;
                           const isCurrentUser = occupant && currentUser && occupant.id === currentUser.id;
                           const isSpeaking = !isRoomAudioDeafened && occupant && !seat.isMuted && (
                             isCurrentUser 
@@ -4730,11 +4730,11 @@ export default function App() {
                       {/* Mic Speak Controller Button (Right next to Input box) */}
                       <button
                         onClick={async () => {
-                          const userSeatIndex = activeRoom.seats.findIndex(s => s.userId === currentUser.id);
+                          const userSeatIndex = activeRoom?.seats?.findIndex(s => s.userId === currentUser.id);
                           
                           if (userSeatIndex === -1) {
                             // Automatically find first empty, unlocked seat to sit them down and open their mic!
-                            const firstEmptySeatIndex = activeRoom.seats.findIndex(s => s.userId === null && !s.isLocked);
+                            const firstEmptySeatIndex = activeRoom?.seats?.findIndex(s => s.userId === null && !s.isLocked);
                             if (firstEmptySeatIndex !== -1) {
                               const updatedSeats = [...activeRoom.seats];
                               updatedSeats[firstEmptySeatIndex] = { 
@@ -4744,7 +4744,7 @@ export default function App() {
                               };
                               const updatedRoom = { ...activeRoom, seats: updatedSeats };
                               setActiveRoom(updatedRoom);
-                              setRooms(rooms.map(r => r.id === activeRoom.id ? updatedRoom : r));
+                              setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
 
                               // Broadcast via Firestore
                               await updateDoc(doc(db, "voice_rooms", activeRoom.id), { seats: updatedSeats });
@@ -4756,13 +4756,13 @@ export default function App() {
                             }
                           } else {
                             // User is already on a seat, toggle their mute state
-                            const seat = activeRoom.seats[userSeatIndex];
+                            const seat = activeRoom?.seats?.[userSeatIndex];
                             const nextMuteStatus = !seat.isMuted;
                             const updatedSeats = [...activeRoom.seats];
                             updatedSeats[userSeatIndex] = { ...seat, isMuted: nextMuteStatus };
                             const updatedRoom = { ...activeRoom, seats: updatedSeats };
                             setActiveRoom(updatedRoom);
-                            setRooms(rooms.map(r => r.id === activeRoom.id ? updatedRoom : r));
+                            setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
 
                             // Broadcast via Firestore
                             await updateDoc(doc(db, "voice_rooms", activeRoom.id), { seats: updatedSeats });
@@ -4777,8 +4777,8 @@ export default function App() {
                           }
                         }}
                         className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer active:scale-90 transition-all shrink-0 ${
-                          activeRoom.seats.some(s => s.userId === currentUser.id)
-                            ? !activeRoom.seats.find(s => s.userId === currentUser.id)?.isMuted
+                          activeRoom?.seats?.some(s => s.userId === currentUser.id)
+                            ? !activeRoom?.seats?.find(s => s.userId === currentUser.id)?.isMuted
                               ? 'bg-emerald-600 border border-emerald-400 text-white animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]'
                               : 'bg-red-950/50 border border-red-500/30 text-red-300'
                             : 'bg-slate-900/80 text-slate-400 border border-white/5 hover:border-purple-500/30'
@@ -4786,7 +4786,7 @@ export default function App() {
                         title="تشغيل/كتم المايك الخاص بك"
                         id="mic-speak-btn"
                       >
-                        {activeRoom.seats.some(s => s.userId === currentUser.id) && !activeRoom.seats.find(s => s.userId === currentUser.id)?.isMuted ? (
+                        {activeRoom?.seats?.some(s => s.userId === currentUser.id) && !activeRoom?.seats?.find(s => s.userId === currentUser.id)?.isMuted ? (
                           <Mic className="w-3.5 h-3.5 text-white" />
                         ) : (
                           <MicOff className="w-3.5 h-3.5 text-red-400" />
@@ -4855,7 +4855,7 @@ export default function App() {
  
                         <div className="space-y-2">
                           {(() => {
-                            const isAuthorizedHost = checkIfOwner(activeRoom) || (activeRoom.seats[0] && activeRoom.seats[0].userId === currentUser.id);
+                            const isAuthorizedHost = checkIfOwner(activeRoom) || (activeRoom?.seats?.[0] && activeRoom?.seats?.[0].userId === currentUser.id);
                             return (
                               <>
                                 {isAuthorizedHost && (
@@ -4867,7 +4867,7 @@ export default function App() {
                                       id="host-action-mute"
                                     >
                                       <span className="text-purple-400">
-                                        {activeRoom.seats[selectedSeatIndex].isMuted ? 'تفعيل الصوت' : 'كتم الميكروفون'}
+                                        {activeRoom?.seats?.[selectedSeatIndex].isMuted ? 'تفعيل الصوت' : 'كتم الميكروفون'}
                                       </span>
                                       <Volume2 className="w-4 h-4 text-purple-400" />
                                     </button>
@@ -4879,18 +4879,18 @@ export default function App() {
                                       id="host-action-lock"
                                     >
                                       <span className="text-amber-400">
-                                        {activeRoom.seats[selectedSeatIndex].isLocked ? 'إلغاء قفل المقعد' : 'قفل المقعد وحجبه'}
+                                        {activeRoom?.seats?.[selectedSeatIndex].isLocked ? 'إلغاء قفل المقعد' : 'قفل المقعد وحجبه'}
                                       </span>
-                                      {activeRoom.seats[selectedSeatIndex].isLocked ? <Unlock className="w-4 h-4 text-amber-400" /> : <Lock className="w-4 h-4 text-amber-400" />}
+                                      {activeRoom?.seats?.[selectedSeatIndex].isLocked ? <Unlock className="w-4 h-4 text-amber-400" /> : <Lock className="w-4 h-4 text-amber-400" />}
                                     </button>
                                   </>
                                 )}
  
                                 {/* Kick Occupant (only visible if seat is occupied) */}
-                                {activeRoom.seats[selectedSeatIndex].userId && (
+                                {activeRoom?.seats?.[selectedSeatIndex].userId && (
                                   <button
                                     onClick={() => {
-                                      if (activeRoom.seats[selectedSeatIndex].userId === currentUser.id) {
+                                      if (activeRoom?.seats?.[selectedSeatIndex].userId === currentUser.id) {
                                         handleHostAction('leave');
                                       } else {
                                         handleHostAction('kick');
@@ -4900,7 +4900,7 @@ export default function App() {
                                     id="host-action-kick"
                                   >
                                     <span>
-                                      {activeRoom.seats[selectedSeatIndex].userId === currentUser.id ? 'النزول من المقعد للجمهور' : 'طرد المستخدم للجمهور'}
+                                      {activeRoom?.seats?.[selectedSeatIndex].userId === currentUser.id ? 'النزول من المقعد للجمهور' : 'طرد المستخدم للجمهور'}
                                     </span>
                                     <ShieldAlert className="w-4 h-4 text-red-400" />
                                   </button>
@@ -4958,7 +4958,7 @@ export default function App() {
                             {activeRoom.seats
                               .filter((seat) => seat.userId !== null)
                               .map((seat) => {
-                                const occupant = users.find((u) => u.id === seat.userId) || (currentUser && seat.userId === currentUser.id ? currentUser : null);
+                                const occupant = users?.find((u) => u.id === seat.userId) || (currentUser && seat.userId === currentUser.id ? currentUser : null);
                                 if (!occupant) return null;
                                 const isSelected = selectedRecipientSeatIndex === seat.index;
                                 const isHost = seat.index === 0;
@@ -5089,19 +5089,19 @@ export default function App() {
                               <button
                                 onClick={() => {
                                   // Find first empty seat index from index 6 to 9 (empty armchairs) or any
-                                  const emptySeatIdx = activeRoom.seats.findIndex(s => s.userId === null && !s.isLocked);
+                                  const emptySeatIdx = activeRoom?.seats?.findIndex(s => s.userId === null && !s.isLocked);
                                   if (emptySeatIdx !== -1) {
                                     const updatedSeats = [...activeRoom.seats];
                                     updatedSeats[emptySeatIdx] = { ...updatedSeats[emptySeatIdx], userId: req.id };
                                     
                                     // ensure user in list
-                                    if (!users.some(u => u.id === req.id)) {
+                                    if (!users?.some(u => u.id === req.id)) {
                                       setUsers(prev => [...prev, { id: req.id, name: req.name, avatar: req.avatar, level: req.level, coins: 150, xp: 900 }]);
                                     }
 
                                     const updatedRoom = { ...activeRoom, seats: updatedSeats };
                                     setActiveRoom(updatedRoom);
-                                    setRooms(rooms.map(r => r.id === activeRoom.id ? updatedRoom : r));
+                                    setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
                                     
                                     setRoomMessages(prev => [
                                       ...prev,
@@ -5495,7 +5495,7 @@ export default function App() {
                         {/* 2. Toggle Speaker voice impulse */}
                         <button
                           onClick={() => {
-                            const validIndexes = activeRoom.seats.filter(s => s.userId !== null).map(s => s.index);
+                            const validIndexes = activeRoom?.seats?.filter(s => s.userId !== null).map(s => s.index);
                             if (validIndexes.length > 0) {
                               const randomIdx = validIndexes[Math.floor(Math.random() * validIndexes.length)];
                               setSpeakingSeatIndex(randomIdx);
@@ -5981,10 +5981,10 @@ export default function App() {
                     {/* Integrated Host Controls for the seat if seated in Room */}
                     {(() => {
                       if (!activeRoom || !currentUser) return null;
-                      const seatedSeat = activeRoom.seats.find(s => s.userId === selectedProfileUser.id);
+                      const seatedSeat = activeRoom?.seats?.find(s => s.userId === selectedProfileUser.id);
                       if (!seatedSeat) return null;
 
-                      const isHost = activeRoom.seats[0].userId === currentUser.id;
+                      const isHost = activeRoom?.seats?.[0].userId === currentUser.id;
                       const isSelf = selectedProfileUser.id === currentUser.id;
 
                       if (!isHost && !isSelf) return null;
@@ -6440,7 +6440,7 @@ export default function App() {
                                 alert("الرجاء تعبئة جميع الحقول المطلوبة");
                                 return;
                               }
-                              const targetUser = users.find(u => (u.displayId === adminAgencyTargetId || u.originalDisplayId === adminAgencyTargetId));
+                              const targetUser = users?.find(u => (u.displayId === adminAgencyTargetId || u.originalDisplayId === adminAgencyTargetId));
                               if (!targetUser) {
                                 alert("لم يتم العثور على مستخدم بهذا الآيدي");
                                 return;
@@ -6525,7 +6525,7 @@ export default function App() {
                                 return;
                               }
                               
-                              const targetUser = users.find(u => (u.displayId === adminCoinAgentTargetId || u.originalDisplayId === adminCoinAgentTargetId));
+                              const targetUser = users?.find(u => (u.displayId === adminCoinAgentTargetId || u.originalDisplayId === adminCoinAgentTargetId));
                               if (!targetUser) {
                                 alert("لم يتم العثور على مستخدم بهذا الآيدي");
                                 return;
@@ -6843,9 +6843,9 @@ export default function App() {
 
                   {adminActiveTab === 'salaries' && (() => {
                     const resolvedRequests = adminWithdrawalRequests.map(req => {
-                      const reqAgencyId = req.agencyId || users.find(u => u.id === req.userId)?.agencyId || null;
-                      const reqAgencyName = req.agencyName || users.find(u => u.id === req.userId)?.agencyName || null;
-                      const reqAgencyOwner = users.find(u => u.id === reqAgencyId);
+                      const reqAgencyId = req.agencyId || users?.find(u => u.id === req.userId)?.agencyId || null;
+                      const reqAgencyName = req.agencyName || users?.find(u => u.id === req.userId)?.agencyName || null;
+                      const reqAgencyOwner = users?.find(u => u.id === reqAgencyId);
                       const reqAgencyDisplayId = req.agencyDisplayId || reqAgencyOwner?.displayId || null;
                       return {
                         ...req,
