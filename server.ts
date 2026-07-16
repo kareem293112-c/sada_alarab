@@ -473,10 +473,7 @@ app.post('/api/sync-balance', (req, res) => {
     res.status(400).json({ error: "Invalid parameters" });
     return;
   }
-  let existingPlayer = gameState.roomPlayers.find(p => p.id === userId);
-  if (existingPlayer) {
-    existingPlayer.balance = balance;
-  }
+  
   if (activeRoomPlayers[userId]) {
     activeRoomPlayers[userId].balance = balance;
   }

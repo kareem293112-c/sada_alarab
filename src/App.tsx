@@ -410,7 +410,7 @@ const VipSizingTool = ({
   );
 };
 
-const GameContainer = ({ activeGameUrl }: { activeGameUrl: string }) => {
+const GameContainer = ({ activeGameUrl, key }: { activeGameUrl: string, key?: string }) => {
   useEffect(() => {
     console.log("GAME OPEN");
     return () => console.log("GAME UNMOUNT");
@@ -1546,6 +1546,7 @@ export default function App() {
 
   // Native Mobile UI States (Bottom sheet draw lists)
   const [isGiftDrawerOpen, setIsGiftDrawerOpen] = useState(false);
+  const [showLeaveRoomDialog, setShowLeaveRoomDialog] = useState(false);
   const [isGameSheetOpen, setIsGameSheetOpen] = useState(false);
   const [activeGameUrl, setActiveGameUrl] = useState<string | null>(null);
   const loadedUserIdentityRef = useRef<string | null>(null);
@@ -4364,36 +4365,8 @@ export default function App() {
 
                       {/* Close X Button */}
                       <button
-                        onClick={async () => {
-                          const isOnSeat = activeRoom?.seats?.some(s => s.userId === currentUser.id);
-                          if (isOnSeat) {
-                            const agoraManager = AgoraEngineManager.getInstance();
-                            agoraManager.stopPublishing();
-                          }
-                          const cleanedSeats = activeRoom?.seats?.map(s => s.userId === currentUser.id ? { ...s, userId: null } : s);
-                          const updatedRoom = { ...activeRoom, seats: cleanedSeats };
-                          setRooms(rooms?.map(r => r.id === activeRoom.id ? updatedRoom : r));
-                          
-                          // Sync with Firestore before leaving
-                          await updateDoc(doc(db, "voice_rooms", activeRoom.id), { seats: cleanedSeats });
-                          
-                          // Remove from participants
-                          if (currentUser) {
-                            const participantRef = doc(db, "voice_rooms", activeRoom.id, "participants", currentUser.id);
-                            deleteDoc(participantRef).catch(err => console.error("Error removing participant:", err));
-                            
-                            // Decrement activeUsersCount
-                            updateDoc(doc(db, "voice_rooms", activeRoom.id), {
-                              activeUsersCount: increment(-1)
-                            }).catch(err => console.error("Error decrementing user count:", err));
-                          }
-                          
-                          setActiveRoom(null);
-                          setIsGiftDrawerOpen(false);
-                          setIsAdminDrawerOpen(false);
-                          setIsQueueDrawerOpen(false);
-                          setSelectedGift(null);
-                          setCurrentScreen('explore');
+                        onClick={() => {
+                          setShowLeaveRoomDialog(true);
                         }}
                         className="w-7 h-7 rounded-full bg-black/40 hover:bg-black/60 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90"
                         id="exit-room-btn"
@@ -7201,6 +7174,103 @@ export default function App() {
           </div>
 
         </div>
+
+        {/* LEAVE ROOM DIALOG */}
+        {showLeaveRoomDialog && (
+          <div className="absolute inset-0 bg-black/60 z-[200] flex items-center justify-center animate-fade-in p-4">
+            <div className="bg-[#1c123d] rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl border border-purple-500/30">
+              <h3 className="text-lg font-bold mb-2">مغادرة الغرفة</h3>
+              <p className="text-sm text-slate-300 mb-6">هل تريد تصغير الغرفة أم الخروج منها نهائياً؟</p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    setShowLeaveRoomDialog(false);
+                    setCurrentScreen('explore');
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition"
+                >
+                  تصغير الغرفة
+                </button>
+                
+                <button
+                  onClick={async () => {
+                    const isOnSeat = activeRoom?.seats?.some(s => s.userId === currentUser?.id);
+                    if (isOnSeat) {
+                      const agoraManager = AgoraEngineManager.getInstance();
+                      agoraManager.stopPublishing();
+                    }
+                    const cleanedSeats = activeRoom?.seats?.map(s => s.userId === currentUser?.id ? { ...s, userId: null } : s) || [];
+                    const updatedRoom = activeRoom ? { ...activeRoom, seats: cleanedSeats } : null;
+                    if (updatedRoom) {
+                      setRooms(rooms?.map(r => r.id === activeRoom?.id ? updatedRoom : r));
+                      
+                      // Sync with Firestore before leaving
+                      await updateDoc(doc(db, "voice_rooms", activeRoom.id), { seats: cleanedSeats });
+                      
+                      // Remove from participants
+                      if (currentUser) {
+                        const participantRef = doc(db, "voice_rooms", activeRoom.id, "participants", currentUser.id);
+                        deleteDoc(participantRef).catch(err => console.error("Error removing participant:", err));
+                        
+                        // Decrement activeUsersCount
+                        updateDoc(doc(db, "voice_rooms", activeRoom.id), {
+                          activeUsersCount: increment(-1)
+                        }).catch(err => console.error("Error decrementing user count:", err));
+                      }
+                    }
+                    
+                    setShowLeaveRoomDialog(false);
+                    setActiveRoom(null);
+                    setIsGiftDrawerOpen(false);
+                    setIsAdminDrawerOpen(false);
+                    setIsQueueDrawerOpen(false);
+                    setSelectedGift(null);
+                    setCurrentScreen('explore');
+                  }}
+                  className="w-full bg-red-500/20 hover:bg-red-500/30 text-red-500 font-bold py-3 rounded-xl transition border border-red-500/30"
+                >
+                  الخروج من الغرفة
+                </button>
+                
+                <button
+                  onClick={() => setShowLeaveRoomDialog(false)}
+                  className="w-full bg-transparent hover:bg-white/5 text-slate-400 font-bold py-3 rounded-xl transition"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MINIMIZED ROOM WIDGET */}
+        {activeRoom && currentScreen !== 'room' && (
+          <div 
+            onClick={() => setCurrentScreen('room')}
+            className="absolute bottom-[90px] right-4 left-4 bg-[#140a33]/95 backdrop-blur-xl border border-purple-500/40 p-2.5 rounded-2xl shadow-2xl flex items-center justify-between z-[90] cursor-pointer animate-fade-in hover:scale-[1.02] transition-transform"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <img src={activeRoom.hostAvatar || "https://api.dicebear.com/7.x/adventurer/svg?seed=placeholder"} alt="host" className="w-10 h-10 rounded-full object-cover border-2 border-amber-400" />
+                <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-[#140a33] animate-pulse"></div>
+              </div>
+              <div className="text-right flex flex-col justify-center">
+                <p className="text-sm font-bold text-white max-w-[150px] truncate leading-tight">{activeRoom.name}</p>
+                <p className="text-[10px] text-emerald-400 font-bold leading-tight mt-0.5">● اضغط للعودة للغرفة</p>
+              </div>
+            </div>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowLeaveRoomDialog(true);
+              }}
+              className="w-9 h-9 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition active:scale-95 ml-1"
+            >
+              <span className="text-sm font-bold">✕</span>
+            </button>
+          </div>
+        )}
 
       </main>
 
