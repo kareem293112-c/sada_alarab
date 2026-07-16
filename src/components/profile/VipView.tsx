@@ -550,7 +550,7 @@ export default function VipView({ onBack, currentUser }: Props) {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-amber-500/5 blur-[80px] rounded-full pointer-events-none"></div>
 
         {/* Top angled actions bar - perfectly aligned with the screen margins */}
-        <div className="w-full px-1 flex items-center justify-between relative z-10 -mt-2 mb-2">
+        <div className="w-full px-1 flex items-center justify-between relative z-10 mt-6 mb-2">
           {/* Right Action: Rules (قواعد) */}
           <button 
             onClick={() => setIsVipRulesModalOpen(true)}
@@ -790,7 +790,12 @@ export default function VipView({ onBack, currentUser }: Props) {
       </div>
 
       {/* Sticky Bottom Action bar styled perfectly like screenshot */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#121118]/95 backdrop-blur-lg border-t border-white/5 p-3.5 flex items-center justify-between shadow-[0_-8px_30px_rgba(0,0,0,0.7)] max-w-md mx-auto rounded-t-3xl">
+      <div 
+        className="fixed left-0 right-0 z-40 bg-[#121118]/95 backdrop-blur-lg border-t border-white/5 p-3.5 flex items-center justify-between shadow-[0_-8px_30px_rgba(0,0,0,0.7)] w-full rounded-t-3xl max-w-md mx-auto"
+        style={{
+          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))'
+        }}
+      >
         
         {/* Right Part: Coin Price display */}
         <div className="flex flex-col items-start pr-1">

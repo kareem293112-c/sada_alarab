@@ -1602,6 +1602,21 @@ export default function App() {
   const [selectedRecipientSeatIndex, setSelectedRecipientSeatIndex] = useState<number | 'all'>('all');
   const [dashboardTab, setDashboardTab] = useState<'party' | 'games' | 'explore' | 'messages' | 'profile'>('party');
 
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'OPEN_WALLET') {
+        setIsGameSheetOpen(false);
+        setCurrentScreen('explore');
+        setDashboardTab('profile');
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('OPEN_WALLET_VIEW'));
+        }, 100);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const fetchLiveLeaderboard = async () => {
     // Firestore real-time listeners handle this now
   };

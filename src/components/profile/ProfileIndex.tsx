@@ -1,5 +1,5 @@
 import WalletView from './WalletView';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppUser } from '../../types';
 import MainMenuView from './MainMenuView';
 import SettingsView from './SettingsView';
@@ -34,6 +34,14 @@ export default function ProfileIndex(props: Props) {
   const [activeView, setActiveView] = useState<string>('main');
   const [initialLevelTab, setInitialLevelTab] = useState<'wealth' | 'popular'>('wealth');
   const [initialSocialTab, setInitialSocialTab] = useState<'friends' | 'followers' | 'following'>('friends');
+
+  useEffect(() => {
+    const handleOpenWallet = () => {
+      setActiveView('wallet');
+    };
+    window.addEventListener('OPEN_WALLET_VIEW', handleOpenWallet);
+    return () => window.removeEventListener('OPEN_WALLET_VIEW', handleOpenWallet);
+  }, []);
 
   const handleNavigate = (view: string) => {
     if (view === 'my_room') {
